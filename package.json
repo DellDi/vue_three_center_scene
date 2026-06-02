@@ -1,0 +1,18 @@
+{
+  "name": "vue-three-center-scene",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Vue2 + Three.js center scene components for IOT park and cleaning robot dashboards",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue2": "^2.3.3",
+    "vite": "^5.4.0",
+    "vue": "^2.7.16",
+    "three": "^0.165.0"
+  },
+  "devDependencies": {}
+}
