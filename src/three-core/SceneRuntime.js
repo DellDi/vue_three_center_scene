@@ -530,11 +530,15 @@ export default class SceneRuntime {
 
     // 粒子显隐：仅在园区场景显示
     if (this.particles) {
-      this.particles.setVisible(cfg.type === 'park')
+      if (this.sceneManager.currentConfig.type === 'park') {
+        this.particles.start()
+      } else {
+        this.particles.setVisible(false)
+      }
     }
 
     // 楼层扫描环：进入楼层时触发
-    if (cfg.type === 'floor' && !instant) {
+    if (this.sceneManager.currentConfig.type === 'floor' && !instant) {
       this._playFloorScanRing()
     }
   }

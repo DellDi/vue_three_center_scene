@@ -32,7 +32,7 @@ export default function buildParkScene (cfg, managers) {
   addParkGround(models, layers)
 
   // ── 2. 道路 ──
-  addRoads(models, layers)
+  addRoads(models, layers, anims)
 
   // ── 3. 环境（树木、路灯、喷泉） ──
   addParkEnvironment(models, layers, anims)
@@ -63,7 +63,7 @@ function addParkGround (models, layers) {
 
 /* ========== 道路网络 ========== */
 
-function addRoads (models, layers) {
+function addRoads (models, layers, anims) {
   const roads = [[0, 8, 172, 12], [36, -10, 12, 128], [-46, 25, 84, 9], [64, 40, 58, 9]]
 
   roads.forEach(([x, z, w, d]) => {
