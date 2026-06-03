@@ -1,36 +1,116 @@
-# Vue2 + Three.js 中间 3D 场景组件 V2
+# Vue Three Center Scene
 
-这版只保留“中间那块”的 Three.js 场景组件，周边二维指标、表格、图表不再内置，方便直接嵌入现有大屏布局。
+Vue2 + Three.js 中间 3D 场景组件。
 
-## 组件
+这次重构目标：不要把场景、下钻、动画、点击、告警、点位都写成一个大组件，后续接真实 glb/gltf 模型时也不需要推翻重写。
+
+## 目录结构
 
 ```text
-src/components/IotCenterScene.vue
-src/components/RobotCenterScene.vue
+src/
+├── components/
+│   ├── IotCenterScene.vue          # IOT 园区场景容器
+│   └── RobotCenterScene.vue        # 机器人清洁场景容器
+│
+├── three-core/
+│   └── SceneRuntime.js             # Three 运行时：渲染、图层、点击、相机、导览、命令
+│
+└── scene-config/
+    ├── iotScene.config.js          # 园区 / 楼层 / 点位 / 视角 / 导览配置
+    └── robotScene.config.js        # 机器人区域 / 路线 / 停留 / 视角 / 导览配置
 ```
 
-## 已覆盖的演示能力
+## 核心维护原则
 
-### RobotCenterScene.vue
+### 1. Vue 只做容器
 
-- 机器人运动速度降低，不再快速穿场。
-- 机器人在关键清洁区域会停留一段时间。
-- 停留时有轻微扫动，不会像卡死。
-- 增加 `robotSpeed` 和 `dwellScale` 参数，方便演示时调节。
-- 限制 OrbitControls 缩放范围，避免缩得过小、拉得过远、黑边和穿模。
-- 去掉厚重正方体底座，仅保留薄平面和线框墙体。
-- 支持楼层俯视、机器人跟随、充电区视角、模拟余量告警、点击机器人 / 区域 / 充电桩弹窗。
+Vue 组件只负责：
 
-### IotCenterScene.vue
+- 挂载 canvas
+- 显示工具栏
+- 显示弹窗
+- 接收 runtime 事件
+- 对外 `emit scene-event`
 
-- 已移除 IOT 场景里的机器人路线。
-- 改为园区设备点位：摄像头、烟感、温度、液位、门禁、消防、充电监测、道闸。
-- 支持点击楼栋下钻到楼层内部。
-- 下钻不是简单拉近，而是切换到“楼层内部场景”：公共走廊、大堂、电梯厅、水泵房、配电房、设备间、监控室、楼层设备点位。
-- 支持返回园区。
-- 下钻 / 返回有过渡遮罩和镜头飞行。
-- 限制缩放范围，避免黑边和穿模。
-- 去掉厚重正方体底座，仅用平面、线框和半透明区域。
+不要在 Vue 组件里继续堆 `new THREE.Mesh`、`Raycaster`、`requestAnimationFrame`。
+
+### 2. 场景配置化
+
+园区、楼栋、楼层、房间、设备点位、机器人路线、相机视角、自动导览都在 `scene-config` 里维护。
+
+后续新增一个点位，只改：
+
+```js
+scene.devices.push({ id, title, type, position, status })
+```
+
+后续新增一个视角，只改：
+
+```js
+scene.cameraPresets.xxx = { position, target }
+```
+
+### 3. 交互命令统一
+
+Runtime 支持统一命令：
+
+```text
+FOCUS_PRESET  切换预设视角
+FOCUS_NODE    聚焦对象
+DRILL_TO      下钻场景
+BACK_SCENE    返回上级场景
+SHOW_ALARM    告警联动
+START_TOUR    开始自动导览
+STOP_TOUR     停止自动导览
+```
+
+按钮、点击楼栋、表格联动、告警列表联动，后续都应该走这套命令，不要各写一套逻辑。
+
+### 4. 下钻用场景栈
+
+内部维护：
+
+```text
+park → building_001_floor_03 → pump_room
+```
+
+返回时出栈，避免用一堆 `isPark / isFloor / isRoom` 的布尔变量控制状态。
+
+### 5. 图层隔离
+
+Runtime 内部默认分层：
+
+```text
+base     基础模型 / 几何体
+device   设备点位
+label    标签
+route    机器人路线
+alarm    告警光圈
+effect   光圈 / 扫描 / 覆盖层
+```
+
+消防视角、安防视角、设备视角，本质上应该是：相机预设 + 图层显隐。
+
+## 接真实模型时怎么改
+
+当前 builder 是低模几何体：
+
+```text
+BoxGeometry / PlaneGeometry / SphereGeometry
+```
+
+后续接三方模型时，不要改 Vue 组件，不要改交互命令，优先只替换 `SceneRuntime` 里对应的建模方法：
+
+```text
+当前：createBuilding / createRoom / createDevice
+后续：GLTFLoader.load('/models/park.glb')
+```
+
+模型负责视觉，业务仍然走：
+
+```text
+scene-config + 透明 hitbox + 设备点位 + 相机预设 + 告警命令
+```
 
 ## 本地运行
 
@@ -39,66 +119,8 @@ npm install
 npm run dev
 ```
 
-浏览器打开：
+打开：
 
 ```text
 http://localhost:8080
 ```
-
-## 组件使用示例
-
-```vue
-<template>
-  <div>
-    <iot-center-scene
-      height="620px"
-      @scene-event="handleSceneEvent"
-    />
-
-    <robot-center-scene
-      height="620px"
-      :robot-speed="5.2"
-      :dwell-scale="1"
-      @scene-event="handleSceneEvent"
-    />
-  </div>
-</template>
-
-<script>
-import IotCenterScene from './components/IotCenterScene.vue'
-import RobotCenterScene from './components/RobotCenterScene.vue'
-
-export default {
-  components: {
-    IotCenterScene,
-    RobotCenterScene
-  },
-  methods: {
-    handleSceneEvent (event) {
-      console.log(event)
-    }
-  }
-}
-</script>
-```
-
-## 对接真实业务数据建议
-
-当前设备、楼栋、房间、路径都写在组件内部，方便一周 Demo 快速落地。
-
-后续建议拆成 props：
-
-```js
-buildings
-parkDevices
-floorRooms
-floorDevices
-robotWaypoints
-alarmEvents
-```
-
-然后用 WebSocket / MQTT / HTTP 轮询替换模拟事件。
-
-## 注意
-
-这版是 Vue2 + Three.js 的演示组件，不依赖真实 3D 模型。后续可以把低模几何体替换为 glb/gltf 模型，但建议保留当前的“透明点击盒 / 点位配置 / 镜头预设 / 下钻状态机”这套结构。

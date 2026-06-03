@@ -1,8 +1,6 @@
-import vue from '@vitejs/plugin-vue2'
+import { createVuePlugin } from '@vitejs/plugin-vue2'
 
 export default {
-  plugins: [vue()],
-  server: {
-    port: 8080
-  }
+  plugins: [createVuePlugin()],
+  server: { port: 8080 }
 }
