@@ -25,6 +25,7 @@
         ref="iotScene"
         height="720px"
         :auto-play="false"
+        :demo-running="demoRunning"
         @scene-event="handleSceneEvent"
       />
       <robot-center-scene
@@ -34,6 +35,7 @@
         :robot-speed="7"
         :dwell-scale="1"
         :auto-play="false"
+        :demo-running="demoRunning"
         @scene-event="handleSceneEvent"
       />
 

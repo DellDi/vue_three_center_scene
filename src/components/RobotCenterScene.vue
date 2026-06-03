@@ -13,7 +13,7 @@
         楼层俯视</button><button @click="cmd({ type: 'FOLLOW_ROBOT' })">机器人跟随</button><button
         @click="cmd({ type: 'FOCUS_PRESET', preset: 'charge' })">
         充电区</button><button @click="togglePause">
-        {{ paused ? '继续任务' : '暂停任务' }}</button><button :class="{ active: tourActive }" @click="toggleTour">
+        {{ paused ? '继续任务' : '暂停任务' }}</button><button :class="{ active: tourActive }" :disabled="demoRunning" @click="toggleTour">
         {{ tourActive ? '暂停导览' : '自动导览' }}</button><button class="danger"
         @click="cmd({ type: 'SHOW_ALARM', deviceId: 'robot' })">
         余量告警
@@ -60,6 +60,7 @@ export default {
     robotSpeed: { type: Number, default: 7 },
     dwellScale: { type: Number, default: 1 },
     autoPlay: { type: Boolean, default: true },
+    demoRunning: { type: Boolean, default: false },
   },
   data () {
     return {
@@ -117,6 +118,11 @@ export default {
     },
     handleRuntimeEvent (event) {
       this.$emit('scene-event', event)
+      // 演示开始时停止手动导览，避免冲突
+      if (event.type === 'demo-started') {
+        if (this.tourActive) { this.tourActive = false; this.cmd({ type: 'STOP_TOUR' }) }
+        return
+      }
       if (event.type === 'select' && event.payload)
         this.tip = Object.assign(
           { show: true, x: event.pointer.x, y: event.pointer.y },
@@ -240,6 +246,11 @@ export default {
 .toolbar button:hover {
   box-shadow: 0 0 14px rgba(0, 245, 255, 0.18);
   border-color: rgba(0, 245, 255, 0.7);
+}
+.toolbar button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .toolbar .danger {
