@@ -63,6 +63,9 @@ import SceneManager from './SceneManager'
 import EffectManager from './EffectManager'
 import CommandBus from './CommandBus'
 import ResourceTracker from './ResourceTracker'
+import ParticleSystem from './ParticleSystem'
+import PortalTransition from './PortalTransition'
+import DemoDirector from './DemoDirector'
 
 export default class SceneRuntime {
   /**
@@ -150,6 +153,16 @@ export default class SceneRuntime {
     const camera = new CameraController(this.camera, this.controls, this.renderer)
     const interactions = new InteractionManager(this.camera, this.renderer.domElement)
     const effects = new EffectManager(layers, anims)
+
+    // ── 粒子系统（仅园区场景显示）──
+    const particles = new ParticleSystem(this.scene, {
+      count: 250,
+      bounds: { x: 110, y: [12, 55], z: 60 }
+    })
+
+    // ── 传送门转场 ──
+    const portal = new PortalTransition(this.container)
+
     const sceneManager = new SceneManager({ models, layers, anims, interactions, resources, effects })
     const commandBus = new CommandBus()
 
@@ -163,6 +176,10 @@ export default class SceneRuntime {
     this.sceneManager = sceneManager
     this.effects = effects
     this.commandBus = commandBus
+    this.particles = particles
+    this.portal = portal
+    this.director = null // DemoDirector 在 start() 之后延迟初始化
+    this._pendingSceneSwitch = null
 
     // 设置事件回调
     this.interactions.setEventCallback((type, payload) => {
@@ -223,7 +240,34 @@ export default class SceneRuntime {
       },
       FOLLOW_ROBOT: () => {
         this.cameraCtrl.startFollow(this.sceneManager.robot)
-      }
+      },
+      START_DEMO: () => {
+        // 延迟初始化 DemoDirector（确保所有引用已就绪）
+        if (!this.director) {
+          this.director = new DemoDirector({
+            execute: (cmd) => this.execute(cmd),
+            emit: (type, payload) => this.emit(type, payload),
+            onTransition: async (targetScene) => {
+              await this.portal.execute(async () => {
+                this.emit('switch-scene', { scene: targetScene })
+                await new Promise(resolve => {
+                  this._pendingSceneSwitch = resolve
+                })
+              })
+            }
+          })
+        }
+        this.director.start()
+      },
+      STOP_DEMO: () => {
+        if (this.director) this.director.stop()
+      },
+      SCENE_SWITCH_READY: () => {
+        if (this._pendingSceneSwitch) {
+          this._pendingSceneSwitch()
+          this._pendingSceneSwitch = null
+        }
+      },
     })
 
     // ═══════════════════════════════════════════
@@ -285,6 +329,11 @@ export default class SceneRuntime {
 
     // 2. 清空场景（递归 dispose 所有 Geometry/Material + CSS2D DOM 元素）
     this.sceneManager.clearScene()
+
+    // 清理新增模块
+    if (this.particles) { this.particles.dispose(); this.particles = null }
+    if (this.portal) { this.portal.dispose(); this.portal = null }
+    if (this.director) { this.director.stop(); this.director = null }
 
     // 3. 额外清空动画和交互（防止 clearScene 后仍有残留）
     this.anims.clear()
@@ -428,10 +477,20 @@ export default class SceneRuntime {
     // 7. 驱动所有注册动画（脉冲、旋转、缩放等）
     this.anims.tick(t, dt)
 
-    // 8. WebGL 渲染
+    // 8. 更新浮动数据粒子（仅园区场景）
+    if (this.particles && this.sceneManager.currentConfig?.type === 'park') {
+      this.particles.update(t)
+    }
+
+    // 9. 演示导演推进
+    if (this.director) {
+      this.director.tick(dt)
+    }
+
+    // 10. WebGL 渲染
     this.renderer.render(this.scene, this.camera)
 
-    // 9. CSS2D 标签渲染
+    // 11. CSS2D 标签渲染
     this.labelRenderer.render(this.scene, this.camera)
   }
 
@@ -468,6 +527,16 @@ export default class SceneRuntime {
       title: this.sceneManager.currentConfig.title,
       sceneId
     })
+
+    // 粒子显隐：仅在园区场景显示
+    if (this.particles) {
+      this.particles.setVisible(cfg.type === 'park')
+    }
+
+    // 楼层扫描环：进入楼层时触发
+    if (cfg.type === 'floor' && !instant) {
+      this._playFloorScanRing()
+    }
   }
 
   /** 下钻到子场景 */
@@ -544,6 +613,21 @@ export default class SceneRuntime {
       currentSpeed: motion.speed,
       battery: Math.max(62, Math.round(76 - progress * 0.08))
     })
+
+    // 同步电池数据和 progress 到 robot.userData（供光环动画和粒子预亮使用）
+    if (robot && robot.userData) {
+      robot.userData.battery = Math.max(62, Math.round(76 - progress * 0.08))
+    }
+    window.__robotMotionProgress = progress
+
+    // 更新清洁覆盖热力图
+    const { heatGrid } = this.sceneManager
+    if (heatGrid && !this._heatMeshes) {
+      this._heatMeshes = []
+    }
+    if (heatGrid && this._heatMeshes) {
+      this._updateHeatMap(heatGrid, this._heatMeshes, pos)
+    }
   }
 
   /* ══════════════════════════════════════════
@@ -562,5 +646,65 @@ export default class SceneRuntime {
       (pos, tar) => this.cameraCtrl.flyTo(pos, tar, 1)
     )
     this.emit('alarm', { title: item.meta.title, id: item.meta.id })
+  }
+
+  /* ══════════════════════════════════════════
+   *  楼层扫描环
+   * ══════════════════════════════════════════ */
+
+  /** 播放楼层扫描环动画 */
+  _playFloorScanRing () {
+    const ringGeo = new THREE.TorusGeometry(60, 0.3, 16, 100)
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x00f5ff,
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false
+    })
+    const ring = new THREE.Mesh(ringGeo, ringMat)
+    ring.rotation.x = Math.PI / 2
+    ring.position.y = 0.5
+    this.layers.addTo('effect', ring)
+
+    const startTime = performance.now()
+    this.anims.register('floor_scan_ring', (t) => {
+      const elapsed = (performance.now() - startTime) / 1000
+      const progress = Math.min(1, elapsed / 2.5)
+      ring.position.y = 0.5 + progress * 11.5
+      ring.material.opacity = 0.5 * (1 - progress)
+      ring.scale.setScalar(1 + progress * 0.15)
+      if (progress >= 1) {
+        this.layers.get('effect').remove(ring)
+        ringGeo.dispose()
+        ringMat.dispose()
+        this.anims.remove('floor_scan_ring')
+      }
+    })
+  }
+
+  /** 更新清洁覆盖热力图 */
+  _updateHeatMap (grid, meshes, robotPos) {
+    grid.forEach((cell, i) => {
+      if (cell.covered) return
+      const dx = robotPos.x - cell.x
+      const dz = robotPos.z - cell.z
+      if (Math.abs(dx) < cell.size / 2 + 3 && Math.abs(dz) < cell.size / 2 + 3) {
+        cell.covered = true
+        const cellMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(cell.size * 0.9, cell.size * 0.9),
+          new THREE.MeshBasicMaterial({
+            color: 0x00f5ff,
+            transparent: true,
+            opacity: 0.08,
+            side: THREE.DoubleSide,
+            depthWrite: false
+          })
+        )
+        cellMesh.rotation.x = -Math.PI / 2
+        cellMesh.position.set(cell.x, 0.55, cell.z)
+        this.layers.addTo('effect', cellMesh)
+        meshes.push(cellMesh)
+      }
+    })
   }
 }
