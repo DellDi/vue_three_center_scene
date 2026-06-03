@@ -7,7 +7,7 @@
       <button @click="cmd({ type: 'FOCUS_PRESET', preset: 'fire' })">消防视角</button>
       <button @click="cmd({ type: 'FOCUS_PRESET', preset: 'security' })">安防视角</button>
       <button @click="cmd({ type: 'FOCUS_PRESET', preset: 'room' })">设备房视角</button>
-      <button :class="{ active: tourActive }" :disabled="demoRunning" @click="toggleTour">{{ tourActive ? '暂停导览' : '自动导览' }}</button>
+      <button :class="{ active: tourActive }" :disabled="disabled" @click="toggleTour">{{ tourActive ? '暂停导览' : '自动导览' }}</button>
       <button class="danger" @click="cmd({ type: 'SHOW_ALARM' })">告警联动</button>
     </div>
     <div ref="host" class="host"></div>
@@ -23,7 +23,7 @@ import config from '../scene-config/iotScene.config'
 
 export default {
   name: 'IotCenterScene',
-  props: { height: { type: String, default: '620px' }, autoPlay: { type: Boolean, default: false }, demoRunning: { type: Boolean, default: false } },
+  props: { height: { type: String, default: '620px' }, autoPlay: { type: Boolean, default: false }, disabled: { type: Boolean, default: false } },
   data () {
     return {
       title: '设备场景总览',
@@ -50,11 +50,6 @@ export default {
     toggleTour () { this.tourActive = !this.tourActive; this.cmd({ type: this.tourActive ? 'START_TOUR' : 'STOP_TOUR' }) },
     handleRuntimeEvent (event) {
       this.$emit('scene-event', event)
-      // 演示开始时停止手动导览，避免冲突
-      if (event.type === 'demo-started') {
-        if (this.tourActive) { this.tourActive = false; this.cmd({ type: 'STOP_TOUR' }) }
-        return
-      }
       if (event.type === 'select' && event.payload) {
         this.tip = Object.assign({ show: true, x: event.pointer.x, y: event.pointer.y }, event.payload)
       }

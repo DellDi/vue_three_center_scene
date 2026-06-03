@@ -25,7 +25,7 @@
         ref="iotScene"
         height="720px"
         :auto-play="false"
-        :demo-running="demoRunning"
+        :disabled="demoRunning"
         @scene-event="handleSceneEvent"
       />
       <robot-center-scene
@@ -35,7 +35,7 @@
         :robot-speed="7"
         :dwell-scale="1"
         :auto-play="false"
-        :demo-running="demoRunning"
+        :disabled="demoRunning"
         @scene-event="handleSceneEvent"
       />
 
@@ -54,6 +54,12 @@
 import IotCenterScene from './components/IotCenterScene.vue'
 import RobotCenterScene from './components/RobotCenterScene.vue'
 
+/** 场景 key → 组件 ref 映射 */
+const SCENES = {
+  iot: { ref: 'iotScene', label: 'IOT 园区场景' },
+  robot: { ref: 'robotScene', label: '机器人清洁场景' }
+}
+
 export default {
   name: 'App',
   components: { IotCenterScene, RobotCenterScene },
@@ -69,18 +75,21 @@ export default {
     }
   },
   watch: {
-    // v-show 切换时触发 resize，修复画布 0x0 导致的黑屏
     active (val) {
       this.$nextTick(() => {
-        const ref = val === 'iot' ? 'iotScene' : 'robotScene'
-        const scene = this.$refs[ref]
-        if (scene && scene.runtime) {
-          this._resizeScene(scene)
-        }
+        const cfg = SCENES[val]
+        if (!cfg) return
+        const scene = this.$refs[cfg.ref]
+        if (scene && scene.runtime) this._resizeScene(scene)
       })
     }
   },
   methods: {
+    /** 获取当前活跃场景的 runtime 引用 */
+    _activeRuntime () {
+      const cfg = SCENES[this.active]
+      return cfg ? this.$refs[cfg.ref]?.runtime : null
+    },
     _resizeScene (scene) {
       const host = scene.$el?.querySelector('.host')
       if (!host || !scene.runtime) return
@@ -97,6 +106,11 @@ export default {
       if (event.type === 'demo-started') {
         this.demoRunning = true
         this.demoProgress = 0
+        // 停止所有场景中可能正在运行的手动导览
+        Object.values(SCENES).forEach(cfg => {
+          const scene = this.$refs[cfg.ref]
+          if (scene && scene.runtime) scene.runtime.execute({ type: 'STOP_TOUR' })
+        })
       }
       if (event.type === 'demo-stopped') {
         this.demoRunning = false
@@ -112,12 +126,8 @@ export default {
       if (event.type === 'switch-scene') {
         this.active = event.scene
         this.$nextTick(() => {
-          const runtime = this.active === 'iot'
-            ? this.$refs.iotScene?.runtime
-            : this.$refs.robotScene?.runtime
-          if (runtime) {
-            runtime.execute({ type: 'SCENE_SWITCH_READY' })
-          }
+          const runtime = this._activeRuntime()
+          if (runtime) runtime.execute({ type: 'SCENE_SWITCH_READY' })
         })
       }
       if (event.type === 'act0-opening') {
@@ -129,15 +139,14 @@ export default {
     },
     async startDemo () {
       this.demoRunning = true
+      // 确保演示从 IOT 场景开始
       if (this.active !== 'iot') {
         this.active = 'iot'
         await this.$nextTick()
         await new Promise(r => setTimeout(r, 500))
       }
-      const runtime = this.$refs.iotScene?.runtime
-      if (runtime) {
-        runtime.execute({ type: 'START_DEMO' })
-      }
+      const runtime = this._activeRuntime()
+      if (runtime) runtime.execute({ type: 'START_DEMO' })
     },
     showChapterTitle (text) {
       this.chapterTitle = text
