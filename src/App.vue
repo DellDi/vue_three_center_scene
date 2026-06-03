@@ -13,7 +13,7 @@
 
     <div class="app-shell">
       <iot-center-scene v-if="active === 'iot'" height="720px" @scene-event="handleSceneEvent" />
-      <robot-center-scene v-if="active === 'robot'" height="720px" :robot-speed="5.2" :dwell-scale="1" @scene-event="handleSceneEvent" />
+      <robot-center-scene v-if="active === 'robot'" height="720px" :robot-speed="2" :dwell-scale="1" @scene-event="handleSceneEvent" />
     </div>
 
     <div class="event-log">
