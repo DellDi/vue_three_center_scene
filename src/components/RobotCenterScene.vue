@@ -131,6 +131,19 @@ export default {
         if (event.battery !== undefined) this.battery = event.battery
       }
     },
+    animateNumber (key, targetValue, duration = 1000) {
+      const start = performance.now()
+      const from = this[key] || 0
+      const to = targetValue
+      const tick = () => {
+        const elapsed = performance.now() - start
+        const progress = Math.min(1, elapsed / duration)
+        const eased = 1 - Math.pow(1 - progress, 3)
+        this[key] = Math.round(from + (to - from) * eased)
+        if (progress < 1) requestAnimationFrame(tick)
+      }
+      tick()
+    },
   },
 }
 </script>
@@ -169,6 +182,8 @@ export default {
   display: flex;
   justify-content: space-between;
   pointer-events: none;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .head b {
@@ -213,10 +228,18 @@ export default {
   border: 1px solid rgba(0, 245, 255, 0.48);
   background: rgba(0, 35, 50, 0.78);
   cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.25s;
 }
 
 .toolbar button.active {
   background: rgba(0, 110, 130, 0.72);
+}
+
+.toolbar button:hover {
+  box-shadow: 0 0 14px rgba(0, 245, 255, 0.18);
+  border-color: rgba(0, 245, 255, 0.7);
 }
 
 .toolbar .danger {
@@ -241,6 +264,8 @@ export default {
   background: rgba(1, 22, 32, 0.92);
   box-shadow: 0 0 22px rgba(0, 245, 255, 0.22);
   pointer-events: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .tip h4 {
@@ -272,6 +297,8 @@ export default {
   padding: 12px;
   border: 1px solid rgba(0, 245, 255, 0.36);
   background: rgba(0, 22, 34, 0.76);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .task h4 {
@@ -319,5 +346,7 @@ export default {
   z-index: 8;
   color: rgba(220, 255, 255, 0.48);
   font-size: 12px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 </style>
