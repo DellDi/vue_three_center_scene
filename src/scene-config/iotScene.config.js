@@ -1,3 +1,15 @@
+function wall (ax, az, bx, by, h = 7, thick = 0.6) {
+  return { ax, az, bx, by, h, thick }
+}
+
+function box (w, h, d, color, x, y, z) {
+  return { shape: 'box', w, h, d, color, x, y, z }
+}
+
+function cyl (r, h, color, x, y, z) {
+  return { shape: 'cyl', r, h, color, x, y, z }
+}
+
 function makeFloorScene (buildingTitle, sceneId) {
   return {
     id: sceneId,
@@ -12,13 +24,116 @@ function makeFloorScene (buildingTitle, sceneId) {
       room: { position: [-32, 42, 48], target: [-42, 0, 26] }
     },
     rooms: [
-      { id: 'corridor', title: '公共走廊', position: [18, -2], size: [94, 18], color: 0x00f5ff },
-      { id: 'lobby', title: '大堂', position: [-48, -22], size: [36, 28], color: 0x0ba7b8 },
-      { id: 'elevator', title: '电梯厅', position: [-4, -24], size: [28, 26], color: 0x0f5f8d },
-      { id: 'pump', title: '水泵房', position: [48, -26], size: [28, 24], color: 0xff554f, alarm: true },
-      { id: 'power', title: '配电房', position: [-42, 26], size: [36, 24], color: 0xffb642, alarm: true },
-      { id: 'equip', title: '设备间', position: [8, 26], size: [32, 24], color: 0x00f5ff },
-      { id: 'monitor', title: '监控室', position: [50, 24], size: [28, 24], color: 0x2d8cff }
+      {
+        id: 'corridor', title: '公共走廊', position: [18, -2], size: [94, 18], color: 0x00f5ff,
+        walls: [
+          wall(-29, -11, 18, -11), wall(26, -11, 65, -11),
+          wall(-29, 7, 65, 7),
+          wall(-29, -11, -29, 7), wall(65, -11, 65, 7)
+        ],
+        furniture: [
+          box(14, 1.2, 0.8, 0x3a5a6a, -8, 0.6, -10),
+          box(14, 1.2, 0.8, 0x3a5a6a, 38, 0.6, -10),
+          box(0.8, 3.5, 0.8, 0xcc3333, 12, 1.75, -10),
+          box(0.8, 3.5, 0.8, 0xcc3333, 50, 1.75, -10)
+        ]
+      },
+      {
+        id: 'lobby', title: '大堂', position: [-48, -22], size: [36, 28], color: 0x0ba7b8,
+        walls: [
+          wall(-66, -36, -30, -36),
+          wall(-66, -8, -52, -8), wall(-44, -8, -30, -8),
+          wall(-66, -36, -66, -8), wall(-30, -36, -30, -8)
+        ],
+        furniture: [
+          box(12, 2.8, 3.5, 0x1a5a7a, -48, 1.4, -30),
+          box(14, 0.3, 4.5, 0x004a6a, -48, 2.95, -30),
+          box(4, 1.6, 4, 0x2a4a5a, -60, 0.8, -16),
+          box(4, 1.6, 4, 0x2a4a5a, -36, 0.8, -16),
+          cyl(1.3, 3, 0x1a6a4a, -60, 1.5, -30),
+          cyl(1, 2.5, 0x2a8a4a, -60, 2.75, -30)
+        ]
+      },
+      {
+        id: 'elevator', title: '电梯厅', position: [-4, -24], size: [28, 26], color: 0x0f5f8d,
+        walls: [
+          wall(-18, -37, 10, -37),
+          wall(-18, -11, -6, -11), wall(2, -11, 10, -11),
+          wall(-18, -37, -18, -11), wall(10, -37, 10, -11)
+        ],
+        furniture: [
+          box(4.5, 6, 0.5, 0x2a4a5a, -8, 3, -36.5),
+          box(4.5, 6, 0.5, 0x2a4a5a, 2, 3, -36.5),
+          box(1.5, 1.8, 0.3, 0x00aacc, -3, 4.2, -36.2)
+        ]
+      },
+      {
+        id: 'pump', title: '水泵房', position: [48, -26], size: [28, 24], color: 0xff554f, alarm: true,
+        walls: [
+          wall(34, -38, 62, -38),
+          wall(34, -14, 42, -14), wall(50, -14, 62, -14),
+          wall(34, -38, 34, -14), wall(62, -38, 62, -14)
+        ],
+        furniture: [
+          cyl(0.7, 5.5, 0x4a6a7a, 40, 2.75, -32),
+          cyl(0.7, 5.5, 0x4a6a7a, 56, 2.75, -32),
+          cyl(0.4, 18, 0x3a5a6a, 48, 5.5, -32),
+          box(5, 3.5, 4, 0x2a4a5a, 48, 1.75, -26),
+          box(1.5, 1, 1, 0xffaa00, 52, 3.5, -26)
+        ]
+      },
+      {
+        id: 'power', title: '配电房', position: [-42, 26], size: [36, 24], color: 0xffb642, alarm: true,
+        walls: [
+          wall(-60, 14, -30, 14), wall(-22, 14, -24, 14),
+          wall(-60, 38, -24, 38),
+          wall(-60, 14, -60, 38), wall(-24, 14, -24, 22), wall(-24, 30, -24, 38)
+        ],
+        furniture: [
+          box(3, 5.5, 2.5, 0x3a4a5a, -54, 2.75, 34),
+          box(3, 5.5, 2.5, 0x3a4a5a, -48, 2.75, 34),
+          box(3, 5.5, 2.5, 0x3a4a5a, -42, 2.75, 34),
+          box(3, 5.5, 2.5, 0x3a4a5a, -36, 2.75, 34),
+          box(6, 4, 4, 0x2a3a4a, -42, 2, 20),
+          box(1.5, 1, 1, 0xff554f, -54, 6, 34)
+        ]
+      },
+      {
+        id: 'equip', title: '设备间', position: [8, 26], size: [32, 24], color: 0x00f5ff,
+        walls: [
+          wall(-8, 14, 24, 14),
+          wall(-8, 38, 24, 38),
+          wall(-8, 14, -8, 38), wall(24, 14, 24, 38)
+        ],
+        furniture: [
+          box(2, 6, 3, 0x1a2a3a, -2, 3, 30),
+          box(2, 6, 3, 0x1a2a3a, 4, 3, 30),
+          box(2, 6, 3, 0x1a2a3a, 10, 3, 30),
+          box(2, 6, 3, 0x1a2a3a, 16, 3, 30),
+          box(1.8, 0.6, 2.8, 0x00aaff, -2, 4.5, 30),
+          box(1.8, 0.6, 2.8, 0x00aaff, 4, 4.5, 30),
+          box(1.8, 0.6, 2.8, 0x00aaff, 10, 4.5, 30),
+          box(8, 2, 2, 0x2a4a5a, 8, 1, 20)
+        ]
+      },
+      {
+        id: 'monitor', title: '监控室', position: [50, 24], size: [28, 24], color: 0x2d8cff,
+        walls: [
+          wall(36, 12, 64, 12),
+          wall(36, 36, 64, 36),
+          wall(36, 12, 36, 36), wall(64, 12, 64, 36)
+        ],
+        furniture: [
+          box(16, 1.2, 3, 0x2a3a4a, 50, 0.6, 30),
+          box(5, 3.5, 0.5, 0x0a1a2a, 44, 3.5, 34),
+          box(5, 3.5, 0.5, 0x0a1a2a, 50, 3.5, 34),
+          box(5, 3.5, 0.5, 0x0a1a2a, 56, 3.5, 34),
+          box(4, 1.5, 0.3, 0x00ccff, 44, 3.5, 34.2),
+          box(4, 1.5, 0.3, 0x00ccff, 50, 3.5, 34.2),
+          box(4, 1.5, 0.3, 0x00ccff, 56, 3.5, 34.2),
+          box(3, 2, 3, 0x1a2a3a, 50, 1, 22)
+        ]
+      }
     ],
     devices: [
       { id: 'f-cam1', title: '走廊摄像头', type: 'AI摄像头', icon: '◉', position: [-14, 8, -2], location: '公共走廊', status: '在线' },

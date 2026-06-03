@@ -1,822 +1,566 @@
+/**
+ * ╔═══════════════════════════════════════════════════════════╗
+ * ║  SceneRuntime.js — Three.js 运行时总入口                    ║
+ * ╠═══════════════════════════════════════════════════════════╣
+ * ║                                                           ║
+ * ║  这是 3D 场景的「总指挥」。它的职责：                         ║
+ * ║                                                           ║
+ * ║    1. 初始化 Three.js 核心三件套：                           ║
+ * ║       Scene（场景）→ Camera（相机）→ Renderer（渲染器）       ║
+ * ║                                                           ║
+ * ║    2. 创建并连接所有管理模块：                                ║
+ * ║       ModelManager     → 模型/材质工厂                       ║
+ * ║       LayerManager     → 图层管理                           ║
+ * ║       AnimationManager → 动画驱动                           ║
+ * ║       CameraController → 镜头控制                           ║
+ * ║       InteractionManager → 点击交互                         ║
+ * ║       SceneManager     → 场景切换                           ║
+ * ║       EffectManager    → 特效管理                           ║
+ * ║       CommandBus       → 命令派发                           ║
+ * ║       ResourceTracker  → 资源追踪                           ║
+ * ║                                                           ║
+ * ║    3. 运行主循环（每秒 60 帧）：                              ║
+ * ║       loop() → updateAll() → render()                     ║
+ * ║                                                           ║
+ * ║    4. 对外暴露简洁 API：                                     ║
+ * ║       start(sceneId)   → 启动                              ║
+ * ║       execute(command) → 执行命令                           ║
+ * ║       dispose()        → 销毁                              ║
+ * ║                                                           ║
+ * ║  ┌─ 模块协作关系 ─────────────────────────────────┐         ║
+ * ║  │                                                 │         ║
+ * ║  │  Vue Component                                  │         ║
+ * ║  │       │                                         │         ║
+ * ║  │       ▼                                         │         ║
+ * ║  │  SceneRuntime ──→ CommandBus                    │         ║
+ * ║  │       │              │                          │         ║
+ * ║  │       ▼              ▼                          │         ║
+ * ║  │  SceneManager    CameraController               │         ║
+ * ║  │       │              │                          │         ║
+ * ║  │       ▼              │                          │         ║
+ * ║  │  builders/ ──→ ModelManager                     │         ║
+ * ║  │       │              │                          │         ║
+ * ║  │       ▼              ▼                          │         ║
+ * ║  │  LayerManager    AnimationManager               │         ║
+ * ║  │       │              │                          │         ║
+ * ║  │       ▼              ▼                          │         ║
+ * ║  │  InteractionManager  EffectManager              │         ║
+ * ║  │                                                 │         ║
+ * ║  └─────────────────────────────────────────────────┘         ║
+ * ╚═══════════════════════════════════════════════════════════╝
+ */
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
+import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 
-const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+// ── 管理模块 ──
+import ModelManager from './ModelManager'
+import LayerManager from './LayerManager'
+import AnimationManager from './AnimationManager'
+import CameraController from './CameraController'
+import InteractionManager from './InteractionManager'
+import SceneManager from './SceneManager'
+import EffectManager from './EffectManager'
+import CommandBus from './CommandBus'
+import ResourceTracker from './ResourceTracker'
 
 export default class SceneRuntime {
+  /**
+   * 创建运行时实例
+   *
+   * @param {Object}  params
+   * @param {HTMLElement} params.container  挂载容器
+   * @param {Object}      params.config    场景配置（来自 scene-config/）
+   * @param {string}      params.mode      'iot' | 'robot'
+   * @param {Function}    params.onEvent   事件回调（发射给 Vue 组件）
+   * @param {Object}      params.options   运行选项（robotSpeed 等）
+   */
   constructor ({ container, config, mode, onEvent, options }) {
     this.container = container
     this.config = config
     this.mode = mode
     this.options = options || {}
     this.onEvent = onEvent || (() => {})
-    this.clock = new THREE.Clock()
 
-    this.sceneStack = []
-    this.nodes = new Map()
-    this.devices = new Map()
-    this.clickables = []
-    this.animations = new Map()
+    // ═══════════════════════════════════════════
+    // Step 1: 创建 Three.js 核心三件套
+    // ═══════════════════════════════════════════
 
-    // Tour state
-    this.tour = { active: false, index: 0, wait: 0, paused: false }
-
-    // Follow state (robot mode)
-    this.followMode = false
-    this.followCamPos = null
-    this.followCamTar = null
-
-    // Camera fly state
-    this.fly = null
-
-    // --- Scene setup ---
+    /**
+     * Scene — 场景容器
+     * 所有 3D 物体都添加到 scene 里
+     * fog 添加雾效（远处物体逐渐消失，增加纵深感）
+     */
     this.scene = new THREE.Scene()
     this.scene.fog = new THREE.Fog(0x020811, 96, 310)
+
+    /**
+     * PerspectiveCamera — 透视相机
+     * fov=45   视野角度（45° 最常用，接近人眼）
+     * aspect   宽高比（resize 时更新）
+     * near=0.1 近裁面（比这更近的不渲染）
+     * far=1500 远裁面（比这更远的不渲染）
+     */
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1500)
+
+    /**
+     * WebGLRenderer — 渲染器
+     * 把 Scene + Camera 渲染到 canvas 上
+     * antialias: 抗锯齿（边缘更平滑）
+     * setPixelRatio: 适配高分屏（Retina 等）
+     * outputColorSpace: sRGB 色彩空间（颜色更准确）
+     */
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     this.renderer.setClearColor(0x020811, 1)
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     container.appendChild(this.renderer.domElement)
 
+    /**
+     * CSS2DRenderer — 2D 标签渲染器
+     * 将 CSS2DObject（HTML 元素）投影到 3D 空间
+     * 覆盖在 WebGLRenderer 上方，pointer-events: none 不拦截鼠标
+     */
     this.labelRenderer = new CSS2DRenderer()
     this.labelRenderer.domElement.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none'
     container.appendChild(this.labelRenderer.domElement)
 
+    /**
+     * OrbitControls — 轨道控制器
+     * 鼠标左键拖拽旋转、右键平移、滚轮缩放
+     * enableDamping: 惯性阻尼（旋转有惯性手感）
+     * dampingFactor: 阻尼系数（越小惯性越大）
+     * screenSpacePanning: false → 平移沿世界 XZ 平面
+     *
+     * 注意：每帧必须调用 controls.update() 才能使阻尼生效
+     */
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.08
     this.controls.screenSpacePanning = false
 
-    this.raycaster = new THREE.Raycaster()
-    this.pointer = new THREE.Vector2()
+    // ═══════════════════════════════════════════
+    // Step 2: 创建管理模块
+    // ═══════════════════════════════════════════
 
-    this.layers = {}
-    ;['base', 'device', 'label', 'route', 'alarm', 'effect'].forEach(k => {
-      this.layers[k] = new THREE.Group()
-      this.scene.add(this.layers[k])
+    const models = new ModelManager()
+    const resources = new ResourceTracker()
+    const anims = new AnimationManager()
+    const layers = new LayerManager(this.scene)
+    const camera = new CameraController(this.camera, this.controls, this.renderer)
+    const interactions = new InteractionManager(this.camera, this.renderer.domElement)
+    const effects = new EffectManager(layers, anims)
+    const sceneManager = new SceneManager({ models, layers, anims, interactions, resources, effects })
+    const commandBus = new CommandBus()
+
+    // 保存引用
+    this.models = models
+    this.resources = resources
+    this.anims = anims
+    this.layers = layers
+    this.cameraCtrl = camera
+    this.interactions = interactions
+    this.sceneManager = sceneManager
+    this.effects = effects
+    this.commandBus = commandBus
+
+    // 设置事件回调
+    this.interactions.setEventCallback((type, payload) => {
+      this.emit(type, payload)
     })
 
+    // 同步模式到相机控制器
+    camera.mode = mode
+
+    // ═══════════════════════════════════════════
+    // Step 3: 设置灯光
+    // ═══════════════════════════════════════════
+
+    /**
+     * 灯光系统：
+     * AmbientLight — 环境光（均匀照亮所有物体，无方向）
+     * DirectionalLight — 平行光（模拟太阳光，有方向）
+     * PointLight — 点光源（从一点向四周发散）
+     */
     this.scene.add(new THREE.AmbientLight(0xb7f8ff, 0.82))
-    const dl = new THREE.DirectionalLight(0xffffff, 1.25)
-    dl.position.set(80, 130, 70)
-    this.scene.add(dl)
-    const pl = new THREE.PointLight(0x00f5ff, 4, 180)
-    pl.position.set(0, 48, 0)
-    this.scene.add(pl)
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.25)
+    dirLight.position.set(80, 130, 70)
+    this.scene.add(dirLight)
+    const pointLight = new THREE.PointLight(0x00f5ff, 4, 180)
+    pointLight.position.set(0, 48, 0)
+    this.scene.add(pointLight)
 
-    // --- Event bindings ---
-    this.pick = this.pick.bind(this)
-    this.resize = this.resize.bind(this)
-    this.onPointerDown = this.onPointerDown.bind(this)
-    this.onWheel = this.onWheel.bind(this)
+    // ═══════════════════════════════════════════
+    // Step 4: 注册命令
+    // ═══════════════════════════════════════════
 
-    this.renderer.domElement.addEventListener('pointerdown', this.pick)
-    this.renderer.domElement.addEventListener('pointerdown', this.onPointerDown)
-    this.renderer.domElement.addEventListener('wheel', this.onWheel)
-    window.addEventListener('resize', this.resize)
-    this.resize()
+    this.commandBus.registerAll({
+      FOCUS_PRESET: (cmd) => {
+        const result = this.cameraCtrl.focusPreset(cmd.preset)
+        if (result === '__follow__') {
+          this.cameraCtrl.startFollow(this.sceneManager.robot)
+        }
+      },
+      FOCUS_NODE: (cmd) => {
+        const item = this.interactions.getNode(cmd.nodeId) ||
+                     this.interactions.getDevice(cmd.nodeId)
+        this.cameraCtrl.focusNode(item)
+      },
+      DRILL_TO: (cmd) => {
+        this.drillTo(cmd.sceneId, cmd.fromNodeId)
+      },
+      BACK_SCENE: () => {
+        this.backScene()
+      },
+      SHOW_ALARM: (cmd) => {
+        this.showAlarm(cmd.deviceId || cmd.nodeId)
+      },
+      START_TOUR: () => {
+        this.cameraCtrl.startTour()
+      },
+      STOP_TOUR: () => {
+        this.cameraCtrl.stopTour()
+      },
+      FOLLOW_ROBOT: () => {
+        this.cameraCtrl.startFollow(this.sceneManager.robot)
+      }
+    })
+
+    // ═══════════════════════════════════════════
+    // Step 5: 绑定事件
+    // ═══════════════════════════════════════════
+
+    this._onPick = this._onPick.bind(this)
+    this._onResize = this._onResize.bind(this)
+    this._onPointerDown = this._onPointerDown.bind(this)
+    this._onWheel = this._onWheel.bind(this)
+
+    this.renderer.domElement.addEventListener('pointerdown', this._onPick)
+    this.renderer.domElement.addEventListener('pointerdown', this._onPointerDown)
+    this.renderer.domElement.addEventListener('wheel', this._onWheel)
+    window.addEventListener('resize', this._onResize)
+    this._onResize()
   }
 
-  /* ========== Lifecycle ========== */
+  /* ══════════════════════════════════════════
+   *  生命周期
+   * ══════════════════════════════════════════ */
 
+  /**
+   * 启动运行时
+   * @param {string} sceneId 初始场景 ID
+   */
   start (sceneId) {
-    this.sceneStack = [sceneId]
-    this.loadScene(sceneId, true)
+    this.sceneManager.initStack(sceneId)
+    this._loadScene(sceneId, true)
     this.running = true
-    this.loop()
+    this._loop()
   }
 
+  /**
+   * 销毁运行时
+   * 释放所有 GPU 资源、移除事件监听、清空 DOM
+   *
+   * 清理顺序：
+   *   1. 停止渲染循环
+   *   2. 移除 DOM 事件监听
+   *   3. 清空场景（dispose 所有 3D 物体 + GPU 资源）
+   *   4. 清空动画、交互索引
+   *   5. dispose 控制器、渲染器、资源追踪器
+   *   6. 清理 CSS2D 标签 DOM 元素
+   *   7. 清空容器
+   */
   dispose () {
     this.running = false
     cancelAnimationFrame(this.raf)
-    clearTimeout(this.resumeTimer)
-    window.removeEventListener('resize', this.resize)
+    clearTimeout(this.cameraCtrl?.resumeTimer)
+
+    // 1. 移除 DOM 事件监听
+    window.removeEventListener('resize', this._onResize)
     if (this.renderer?.domElement) {
-      this.renderer.domElement.removeEventListener('pointerdown', this.pick)
-      this.renderer.domElement.removeEventListener('pointerdown', this.onPointerDown)
-      this.renderer.domElement.removeEventListener('wheel', this.onWheel)
+      this.renderer.domElement.removeEventListener('pointerdown', this._onPick)
+      this.renderer.domElement.removeEventListener('pointerdown', this._onPointerDown)
+      this.renderer.domElement.removeEventListener('wheel', this._onWheel)
     }
-    this.clearScene()
-    this.controls.dispose()
-    this.renderer.dispose()
+
+    // 2. 清空场景（递归 dispose 所有 Geometry/Material + CSS2D DOM 元素）
+    this.sceneManager.clearScene()
+
+    // 3. 额外清空动画和交互（防止 clearScene 后仍有残留）
+    this.anims.clear()
+    this.interactions.clear()
+
+    // 4. 递归 dispose 场景中直接添加的物体（灯光等，不在图层中）
+    if (this.scene) {
+      while (this.scene.children.length > 0) {
+        const child = this.scene.children[0]
+        this.layers._disposeRecursive(child)
+        this.scene.remove(child)
+      }
+    }
+
+    // 5. dispose 控制器和渲染器
+    if (this.controls) this.controls.dispose()
+    if (this.renderer) this.renderer.dispose()
+
+    // 6. 释放 ResourceTracker 追踪的所有资源
+    if (this.resources) this.resources.disposeAll()
+
+    // 7. 移除 CSS2DRenderer 的 DOM 容器（清理残留的 CSS2D 标签元素）
+    if (this.labelRenderer?.domElement) {
+      // 清理 CSS2DRenderer 内部缓存的所有 DOM 子元素
+      while (this.labelRenderer.domElement.firstChild) {
+        this.labelRenderer.domElement.removeChild(this.labelRenderer.domElement.firstChild)
+      }
+      if (this.labelRenderer.domElement.parentNode) {
+        this.labelRenderer.domElement.parentNode.removeChild(this.labelRenderer.domElement)
+      }
+    }
+
+    // 8. 清空容器（兜底清理，移除 renderer canvas 等）
     this.container.innerHTML = ''
+
+    // 9. 释放引用，帮助 GC
+    this.renderer = null
+    this.labelRenderer = null
+    this.scene = null
+    this.camera = null
+    this.controls = null
   }
 
-  /* ========== Event handlers ========== */
+  /* ══════════════════════════════════════════
+   *  事件处理
+   * ══════════════════════════════════════════ */
 
+  /** 发射事件到 Vue 组件 */
   emit (type, payload) {
     this.onEvent({ type, ...payload })
   }
 
-  onPointerDown () {
-    // User drags → pause tour + exit follow, hand control to OrbitControls
-    if (this.tour.active) {
-      this.tour.paused = true
-      clearTimeout(this.resumeTimer)
-      this.resumeTimer = setTimeout(() => { this.tour.paused = false }, 10000)
-    }
-    if (this.followMode) {
-      this.followMode = false
-    }
+  /** 用户拖拽/点击 → 暂停导览 + 退出跟随 */
+  _onPointerDown () {
+    this.cameraCtrl.pauseTourOnInteraction()
   }
 
-  onWheel () {
-    if (this.tour.active) {
-      this.tour.paused = true
-      clearTimeout(this.resumeTimer)
-      this.resumeTimer = setTimeout(() => { this.tour.paused = false }, 10000)
+  /** 用户滚轮 → 暂停导览 */
+  _onWheel () {
+    if (this.cameraCtrl.tour.active) {
+      this.cameraCtrl.tour.paused = true
+      clearTimeout(this.cameraCtrl.resumeTimer)
+      this.cameraCtrl.resumeTimer = setTimeout(() => {
+        this.cameraCtrl.tour.paused = false
+      }, 10000)
     }
   }
 
-  /* ========== Command dispatch ========== */
-
-  execute (cmd) {
-    if (!cmd) return
-    switch (cmd.type) {
-      case 'FOCUS_PRESET': this.focusPreset(cmd.preset); break
-      case 'FOCUS_NODE': this.focusNode(cmd.nodeId); break
-      case 'DRILL_TO': this.drillTo(cmd.sceneId, cmd.fromNodeId); break
-      case 'BACK_SCENE': this.backScene(); break
-      case 'SHOW_ALARM': this.showAlarm(cmd.deviceId || cmd.nodeId); break
-      case 'START_TOUR': this.startTour(); break
-      case 'STOP_TOUR': this.stopTour(); break
-      case 'FOLLOW_ROBOT': this.startFollow(); break
+  /** 点击拾取 */
+  _onPick (event) {
+    const meta = this.interactions.pick(event)
+    if (meta?.action === 'drill') {
+      this.drillTo(meta.drillSceneId, meta.id)
     }
   }
 
-  /* ========== Core loop ========== */
-
-  loop () {
-    if (!this.running) return
-    this.raf = requestAnimationFrame(() => this.loop())
-    const dt = Math.min(this.clock.getDelta(), 0.05)
-    const t = performance.now() / 1000
-
-    this.updateRobot(dt)
-    this.updateTour(dt)
-    this.updateFly(dt)
-    this.controls.update()
-    this.followUpdate()
-    this.clampCamera()
-    this.animations.forEach(fn => fn(t, dt))
-    this.renderer.render(this.scene, this.camera)
-    this.labelRenderer.render(this.scene, this.camera)
-  }
-
-  /* ========== Scene management ========== */
-
-  resize () {
+  /** 窗口 resize */
+  _onResize () {
     const w = this.container.clientWidth || 1
     const h = this.container.clientHeight || 1
-    this.camera.aspect = w / h
-    this.camera.updateProjectionMatrix()
-    this.renderer.setSize(w, h)
+    this.cameraCtrl.resize(w, h)
     this.labelRenderer.setSize(w, h)
   }
 
-  clearScene () {
-    Object.values(this.layers).forEach(g => {
-      while (g.children.length) {
-        this.disposeObject(g.children[0])
-        g.remove(g.children[0])
-      }
-    })
-    this.nodes.clear()
-    this.devices.clear()
-    this.clickables = []
-    this.animations.clear()
+  /* ══════════════════════════════════════════
+   *  命令执行（对外 API）
+   * ══════════════════════════════════════════ */
+
+  /** 执行命令（Vue 组件调用） */
+  execute (cmd) {
+    this.commandBus.execute(cmd)
   }
 
-  disposeObject (o) {
-    if (!o) return
-    if (o.element?.parentNode) {
-      o.element.parentNode.removeChild(o.element)
-    }
-    if (o.geometry) o.geometry.dispose()
-    if (o.material) {
-      (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose?.())
-    }
-    if (o.children) {
-      o.children.slice().forEach(c => this.disposeObject(c))
-    }
+  /* ══════════════════════════════════════════
+   *  主循环
+   * ══════════════════════════════════════════ */
+
+  /**
+   * 渲染主循环 — 每秒约执行 60 次
+   *
+   * 每一帧的执行顺序：
+   *   1. updateRobot  → 更新机器人位置和拖尾
+   *   2. updateTour   → 更新导览计时器
+   *   3. updateFly    → 更新飞行动画
+   *   4. controls.update() → 更新轨道控制器（阻尼）
+   *   5. followUpdate → 更新跟随相机
+   *   6. clampCamera  → 约束相机位置
+   *   7. anims.tick() → 驱动所有注册动画
+   *   8. render       → WebGL 渲染
+   *   9. labelRender  → CSS2D 标签渲染
+   */
+  _loop () {
+    if (!this.running) return
+    this.raf = requestAnimationFrame(() => this._loop())
+
+    const dt = Math.min(this.anims.clock.getDelta(), 0.05)
+    const t = performance.now() / 1000
+
+    // 1. 更新机器人运动
+    this._updateRobot(dt)
+
+    // 2. 更新导览
+    this.cameraCtrl.updateTour(
+      dt,
+      (cmd) => this.execute(cmd),
+      (type, payload) => this.emit(type, payload)
+    )
+
+    // 3. 更新飞行动画
+    this.cameraCtrl.updateFly(dt)
+
+    // 4. 更新轨道控制器（必须每帧调用，否则阻尼无效）
+    this.controls.update()
+
+    // 5. 更新跟随相机
+    this.cameraCtrl.followUpdate(this.sceneManager.robot)
+
+    // 6. 约束相机位置
+    this.cameraCtrl.clampCamera()
+
+    // 7. 驱动所有注册动画（脉冲、旋转、缩放等）
+    this.anims.tick(t, dt)
+
+    // 8. WebGL 渲染
+    this.renderer.render(this.scene, this.camera)
+
+    // 9. CSS2D 标签渲染
+    this.labelRenderer.render(this.scene, this.camera)
   }
 
-  loadScene (sceneId, instant) {
-    const cfg = this.config.scenes[sceneId]
-    if (!cfg) return
-    this.clearScene()
-    this.followMode = false
-    this.fly = null
-    this.currentSceneId = sceneId
-    this.currentConfig = cfg
-    this.applyControls(cfg.controls)
+  /* ══════════════════════════════════════════
+   *  场景管理
+   * ══════════════════════════════════════════ */
 
-    if (this.mode === 'robot') {
-      this.buildRobot(cfg)
-    } else {
-      cfg.type === 'floor' ? this.buildIotFloor(cfg) : this.buildIotPark(cfg)
-    }
+  _loadScene (sceneId, instant) {
+    const result = this.sceneManager.loadScene(
+      sceneId, this.config, this.mode, this.options, instant
+    )
+    if (!result) return
 
-    const p = cfg.cameraPresets.default
-    if (p) this.flyTo(p.position, p.target, instant ? 0.01 : 1.2)
-    this.emit('scene-change', { title: cfg.title, sceneId })
-  }
+    // 同步相机配置
+    this.cameraCtrl.currentConfig = this.sceneManager.currentConfig
+    this.cameraCtrl.currentConfig._tourSteps = this.config.tours?.[sceneId] || []
 
-  applyControls (c = {}) {
-    this.controls.minDistance = c.minDistance || 36
-    this.controls.maxDistance = c.maxDistance || 180
+    // 应用控制约束
+    const ctrl = this.sceneManager.currentConfig.controls || {}
+    this.controls.minDistance = ctrl.minDistance || 36
+    this.controls.maxDistance = ctrl.maxDistance || 180
     this.controls.maxPolarAngle = Math.PI / 2.08
-  }
 
-  /* ========== Building helpers ========== */
-
-  mat (color, opacity = 0.78, emissive = 0x00384c) {
-    return new THREE.MeshStandardMaterial({
-      color, transparent: true, opacity,
-      roughness: 0.46, metalness: 0.22, emissive, emissiveIntensity: 0.5
-    })
-  }
-
-  edges (mesh, color = 0x00eaff, opacity = 0.7) {
-    mesh.add(new THREE.LineSegments(
-      new THREE.EdgesGeometry(mesh.geometry),
-      new THREE.LineBasicMaterial({ color, transparent: true, opacity })
-    ))
-  }
-
-  label (text, alarm) {
-    const el = document.createElement('div')
-    el.textContent = text
-    el.style.cssText = `color:#eaffff;font-size:13px;white-space:nowrap;background:${alarm ? 'rgba(70,18,20,.88)' : 'rgba(1,26,36,.84)'};border:1px solid ${alarm ? 'rgba(255,85,79,.75)' : 'rgba(0,245,255,.62)'};padding:5px 10px;box-shadow:0 0 14px rgba(0,245,255,.3);pointer-events:none`
-    return new CSS2DObject(el)
-  }
-
-  ring (radius, color = 0x00f5ff) {
-    const g = new THREE.Group()
-    const r = new THREE.Mesh(
-      new THREE.RingGeometry(radius * 0.64, radius, 64),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.24, side: THREE.DoubleSide })
-    )
-    r.rotation.x = -Math.PI / 2
-    g.add(r)
-    g.userData.update = t => { r.rotation.z = t * 0.6 }
-    return g
-  }
-
-  addClickable (object, meta, bucket) {
-    object.userData.meta = meta
-    this.clickables.push(object)
-    if (bucket === 'device') {
-      this.devices.set(meta.id, { object, meta })
-    } else {
-      this.nodes.set(meta.id, { object, meta })
-    }
-  }
-
-  /* ========== IOT Park scene ========== */
-
-  buildIotPark (cfg) {
-    this.addGrid(210)
-    this.addRoads()
-    cfg.buildings.forEach(b => this.createBuilding(b))
-    cfg.devices.forEach(d => this.createDevice(d))
-  }
-
-  buildIotFloor (cfg) {
-    this.addGrid(145, 150, 96)
-    cfg.rooms.forEach(r => this.createRoom(r, cfg.title))
-    cfg.devices.forEach(d => this.createDevice(d))
-    const walls = [[-74,0,1,92],[74,0,1,92],[0,-47,148,1],[0,47,148,1],[18,-14,94,1],[18,14,94,1]]
-    walls.forEach(w => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w[2], 5.6, w[3]), this.mat(0x244b5a, 0.34, 0x002b34))
-      m.position.set(w[0], 2.8, w[1])
-      this.layers.base.add(m)
-    })
-  }
-
-  addGrid (size, w = 220, h = 220) {
-    const grid = new THREE.GridHelper(size, 40, 0x00ffff, 0x0b4050)
-    grid.material.transparent = true
-    grid.material.opacity = 0.2
-    this.layers.base.add(grid)
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(w, h), this.mat(0x071520, 0.96, 0))
-    ground.rotation.x = -Math.PI / 2
-    this.layers.base.add(ground)
-  }
-
-  addRoads () {
-    const roads = [[0,8,172,12],[36,-10,12,128],[-46,25,84,9],[64,40,58,9]]
-    roads.forEach(r => {
-      const m = new THREE.Mesh(
-        new THREE.PlaneGeometry(r[2], r[3]),
-        new THREE.MeshBasicMaterial({ color: 0x00f5ff, transparent: true, opacity: 0.16, side: THREE.DoubleSide })
+    // 飞到默认视角
+    if (result.cameraPreset) {
+      this.cameraCtrl.flyTo(
+        result.cameraPreset.position,
+        result.cameraPreset.target,
+        instant ? 0.01 : 1.2
       )
-      m.rotation.x = -Math.PI / 2
-      m.position.set(r[0], 0.1, r[1])
-      this.layers.base.add(m)
+    }
+
+    this.emit('scene-change', {
+      title: this.sceneManager.currentConfig.title,
+      sceneId
     })
   }
 
-  createBuilding (b) {
-    const g = new THREE.Group()
-    const [px, py, pz] = b.position
-    g.position.set(px, py, pz)
-
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(...b.size),
-      this.mat(b.alarm ? 0x351719 : 0x0c4d67, 0.78, b.alarm ? 0x401010 : 0x00384c)
-    )
-    body.position.y = b.size[1] / 2
-    this.edges(body, b.alarm ? 0xff554f : 0x00eaff)
-    g.add(body)
-
-    const lab = this.label(b.title, b.alarm)
-    lab.position.set(0, b.size[1] + 9, 0)
-    g.add(lab)
-
-    const rg = this.ring(b.alarm ? 11 : 9, b.alarm ? 0xff554f : 0x00f5ff)
-    rg.position.set(px, 0.12, pz)
-    this.layers.effect.add(rg)
-    this.animations.set(`ring_${b.id}`, t => rg.userData.update(t))
-
-    const meta = {
-      ...b,
-      type: '楼栋 / 区域',
-      location: '智慧物业园区',
-      action: 'drill',
-      desc: '点击后切换到楼层内部视角，展示设备点位。',
-      camera: {
-        position: [px + 38, 38, pz + 44],
-        target: [px, 8, pz]
-      }
-    }
-
-    this.layers.base.add(g)
-    this.addClickable(g, meta)
+  /** 下钻到子场景 */
+  drillTo (sceneId, fromNodeId) {
+    if (!this.sceneManager.drillTo(sceneId)) return
+    this.emit('drill-down', { title: `下钻：${sceneId}`, sceneId, fromNodeId })
+    this._loadScene(sceneId)
   }
 
-  createRoom (r, sceneTitle) {
-    const g = new THREE.Group()
-    const [rx, rz] = r.position
-
-    const p = new THREE.Mesh(
-      new THREE.PlaneGeometry(r.size[0], r.size[1]),
-      new THREE.MeshBasicMaterial({ color: r.color, transparent: true, opacity: r.alarm ? 0.22 : 0.18, side: THREE.DoubleSide })
-    )
-    p.rotation.x = -Math.PI / 2
-    p.position.set(rx, 0.2, rz)
-
-    const bd = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(r.size[0], 0.18, r.size[1])),
-      new THREE.LineBasicMaterial({ color: r.color, transparent: true, opacity: 0.72 })
-    )
-    bd.position.set(rx, 0.34, rz)
-    g.add(p, bd)
-
-    const lab = this.label(r.title, r.alarm)
-    lab.position.set(rx, 5.4, rz)
-    this.layers.label.add(lab)
-
-    const meta = {
-      ...r,
-      type: '楼层房间 / 区域',
-      location: sceneTitle,
-      status: r.alarm ? '存在异常' : '正常',
-      desc: '楼层内部区域，可查看房间设备点位、告警、视频与工单。',
-      camera: {
-        position: [rx + 18, 34, rz + 22],
-        target: [rx, 0, rz]
-      }
-    }
-
-    this.layers.base.add(g)
-    this.addClickable(g, meta)
+  /** 返回上一级 */
+  backScene () {
+    const prevId = this.sceneManager.backScene()
+    this.emit('back-scene', { title: `返回：${prevId}`, sceneId: prevId })
+    this._loadScene(prevId)
   }
 
-  createDevice (d) {
-    const g = new THREE.Group()
-    const [dx, dy, dz] = d.position
-    g.position.set(dx, dy, dz)
+  /* ══════════════════════════════════════════
+   *  机器人运动更新
+   * ══════════════════════════════════════════ */
 
-    const c = d.alarm ? 0xff554f : 0x00f5ff
-    const ball = new THREE.Mesh(
-      new THREE.SphereGeometry(2.5, 32, 16),
-      new THREE.MeshStandardMaterial({
-        color: c, emissive: c,
-        emissiveIntensity: d.alarm ? 1.7 : 1.05,
-        transparent: true, opacity: 0.92
-      })
-    )
+  _updateRobot (dt) {
+    const { robot, motion, waypoints, trailBuf, trailGeo } = this.sceneManager
+    if (!robot || !motion || motion.paused) return
 
-    const lab = this.label(`${d.icon || '●'} ${d.title}`, d.alarm)
-    lab.position.set(0, 6.2, 0)
-    g.add(ball, lab)
-    this.layers.device.add(g)
+    const cur = waypoints[motion.index]
+    const ni = (motion.index + 1) % waypoints.length
+    const nxt = waypoints[ni]
 
-    const meta = {
-      ...d,
-      desc: d.alarm ? '设备异常，支持联动视频、派单、复位与趋势查看。' : '设备在线，运行状态正常。',
-      camera: {
-        position: [dx + 20, dy + 20, dz + 22],
-        target: [dx, dy, dz]
-      }
-    }
-    this.addClickable(g, meta, 'device')
-    this.animations.set(`dev_${d.id}`, t => {
-      ball.scale.setScalar(1 + Math.sin(t * (d.alarm ? 7 : 3)) * (d.alarm ? 0.22 : 0.08))
-    })
-  }
-
-  /* ========== Robot scene ========== */
-
-  buildRobot (cfg) {
-    this.addGrid(178, 182, 116)
-    cfg.rooms.forEach(r => this.createRobotRoom(r))
-    this.createRobotPath(cfg.waypoints)
-    this.createRobot()
-  }
-
-  createRobotRoom (r) {
-    const g = new THREE.Group()
-    const [rx, rz] = r.position
-
-    const p = new THREE.Mesh(
-      new THREE.PlaneGeometry(r.size[0], r.size[1]),
-      new THREE.MeshBasicMaterial({
-        color: r.color, transparent: true,
-        opacity: r.status === '执行中' ? 0.32 : 0.17,
-        side: THREE.DoubleSide
-      })
-    )
-    p.rotation.x = -Math.PI / 2
-    p.position.set(rx, 0.18, rz)
-    g.add(p)
-
-    const lab = this.label(r.title)
-    lab.position.set(rx, 5.4, rz)
-    this.layers.label.add(lab)
-
-    const meta = {
-      ...r,
-      type: '清洁区域',
-      location: '3F',
-      desc: '机器人在该区域按清洁策略执行任务，确保覆盖质量。',
-      camera: {
-        position: [rx + 22, 38, rz + 30],
-        target: [rx, 0, rz]
-      }
-    }
-    this.layers.base.add(g)
-    this.addClickable(g, meta)
-  }
-
-  createRobotPath (wps) {
-    this.waypoints = wps.map(p => ({
-      ...p,
-      vector: new THREE.Vector3(...p.position)
-    }))
-
-    const curve = new THREE.CatmullRomCurve3(
-      this.waypoints.map(p => p.vector),
-      false, 'catmullrom', 0.16
-    )
-    this.layers.route.add(new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints(curve.getPoints(240)),
-      new THREE.LineBasicMaterial({ color: 0x00f5ff, transparent: true, opacity: 0.8 })
-    ))
-
-    // Animated dots along the path
-    for (let i = 0; i < 16; i++) {
-      const dot = new THREE.Mesh(
-        new THREE.SphereGeometry(0.55, 12, 8),
-        new THREE.MeshBasicMaterial({ color: 0x8fffff, transparent: true, opacity: 0.75 })
-      )
-      this.layers.route.add(dot)
-      this.animations.set(`dot_${i}`, ((idx) => t => {
-        const u = (idx / 16 + t * 0.025) % 1
-        dot.position.copy(curve.getPoint(u))
-        dot.position.y = 1.65
-      })(i))
-    }
-  }
-
-  createRobot () {
-    const robot = new THREE.Group()
-
-    const body = new THREE.Mesh(
-      new THREE.CylinderGeometry(4.6, 5.1, 2.8, 40),
-      new THREE.MeshStandardMaterial({ color: 0xeaf3f3, roughness: 0.48, metalness: 0.18, emissive: 0x123445, emissiveIntensity: 0.18 })
-    )
-    body.position.y = 2.1
-
-    const head = new THREE.Mesh(
-      new THREE.CylinderGeometry(2, 2.2, 1.4, 32),
-      new THREE.MeshStandardMaterial({ color: 0x0d1118, emissive: 0x00eaff, emissiveIntensity: 0.35 })
-    )
-    head.position.y = 4.35
-
-    const front = new THREE.Mesh(
-      new THREE.BoxGeometry(1.2, 0.7, 4.6),
-      new THREE.MeshBasicMaterial({ color: 0x00f5ff })
-    )
-    front.position.set(0, 2.3, 5.1)
-
-    const halo = new THREE.Mesh(
-      new THREE.SphereGeometry(7, 32, 14),
-      new THREE.MeshBasicMaterial({ color: 0x00f5ff, transparent: true, opacity: 0.1, wireframe: true })
-    )
-    halo.position.y = 2.6
-
-    const lab = this.label('GX-001')
-    lab.position.set(0, 9.2, 0)
-
-    robot.add(body, head, front, halo, lab)
-    robot.position.copy(this.waypoints[0].vector)
-    this.layers.device.add(robot)
-    this.robot = robot
-
-    this.motion = {
-      index: 0, progress: 0, dwell: 0,
-      speed: this.options.robotSpeed || 7,
-      dwellScale: this.options.dwellScale || 1,
-      paused: false
-    }
-
-    this.animations.set('halo', t => {
-      halo.scale.setScalar(1 + Math.sin(t * 4.2) * 0.1)
-    })
-
-    this.addClickable(robot, {
-      id: 'robot',
-      title: 'GX-001 高仙拖地机器人',
-      type: '清洁机器人',
-      location: '3F 公共走廊',
-      status: '执行中',
-      desc: '机器人按规划路径执行清洁任务，重点区域自动停留深度清洁。',
-      camera: { position: [28, 34, 34], target: [34, 2, -6] }
-    }, 'device')
-  }
-
-  updateRobot (dt) {
-    if (!this.robot || !this.motion || this.motion.paused) return
-
-    const cur = this.waypoints[this.motion.index]
-    const ni = (this.motion.index + 1) % this.waypoints.length
-    const nxt = this.waypoints[ni]
-
-    if (this.motion.dwell > 0) {
-      this.motion.dwell -= dt
+    // 停留清洁
+    if (motion.dwell > 0) {
+      motion.dwell -= dt
       this.emit('robot-state', {
         title: cur.name,
-        dwellLeft: Math.max(0, this.motion.dwell),
+        dwellLeft: Math.max(0, motion.dwell),
         currentSpeed: 0
       })
-      this.robot.rotation.y += Math.sin(performance.now() / 1000 * 1.4) * 0.002
+      robot.rotation.y += Math.sin(performance.now() / 1000 * 1.4) * 0.002
       return
     }
 
+    // 移动插值
     const dis = cur.vector.distanceTo(nxt.vector)
-    this.motion.progress += (this.motion.speed * dt) / Math.max(dis, 1)
+    motion.progress += (motion.speed * dt) / Math.max(dis, 1)
 
-    if (this.motion.progress >= 1) {
-      this.motion.index = ni
-      this.motion.progress = 0
-      this.motion.dwell = (nxt.dwell || 3) * this.motion.dwellScale
+    if (motion.progress >= 1) {
+      motion.index = ni
+      motion.progress = 0
+      motion.dwell = (nxt.dwell || 3) * motion.dwellScale
+      if (ni === 0 && trailBuf) {
+        trailBuf.length = 0
+        if (trailGeo) trailGeo.setFromPoints([])
+      }
       this.emit('robot-dwell', { title: `机器人停留清洁：${nxt.name}` })
       return
     }
 
-    const pos = cur.vector.clone().lerp(nxt.vector, this.motion.progress)
+    const pos = cur.vector.clone().lerp(nxt.vector, motion.progress)
     const look = pos.clone().lerp(nxt.vector, 0.2)
-    this.robot.position.copy(pos)
-    this.robot.lookAt(look.x, look.y, look.z)
+    robot.position.copy(pos)
+    robot.lookAt(look.x, look.y, look.z)
 
-    const total = this.waypoints.length - 1
-    const progress = Math.min(99, ((this.motion.index + this.motion.progress) / total) * 100)
+    // 更新清洁拖尾
+    if (trailBuf && trailGeo) {
+      trailBuf.push(pos.clone())
+      if (trailBuf.length > 80) trailBuf.shift()
+      trailGeo.setFromPoints(trailBuf)
+    }
+
+    const total = waypoints.length - 1
+    const progress = Math.min(99, ((motion.index + motion.progress) / total) * 100)
     this.emit('robot-state', {
       title: cur.name,
       progress,
-      currentSpeed: this.motion.speed,
+      currentSpeed: motion.speed,
       battery: Math.max(62, Math.round(76 - progress * 0.08))
     })
   }
 
-  /* ========== Follow mode (robot) ========== */
-
-  startFollow () {
-    this.followMode = true
-    this.fly = null
-    if (this.robot) {
-      const dir = this.getRobotBackDir()
-      this.followCamPos = this.robot.position.clone().add(dir.clone().multiplyScalar(28))
-      this.followCamPos.y += 20
-      this.followCamTar = this.robot.position.clone()
-      this.followCamTar.y += 2
-    }
-  }
-
-  stopFollow () {
-    this.followMode = false
-  }
-
-  getRobotBackDir () {
-    const yaw = this.robot ? this.robot.rotation.y : 0
-    return new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw))
-  }
-
-  followUpdate () {
-    if (!this.followMode || !this.robot) return
-
-    const dir = this.getRobotBackDir()
-    const desired = this.robot.position.clone().add(dir.clone().multiplyScalar(28))
-    desired.y += 20
-    const desiredTar = this.robot.position.clone()
-    desiredTar.y += 2
-
-    if (!this.followCamPos) {
-      this.followCamPos = desired.clone()
-      this.followCamTar = desiredTar.clone()
-    }
-
-    // Camera lags slightly behind ideal for cinematic feel
-    this.followCamPos.lerp(desired, 0.12)
-    this.followCamTar.lerp(desiredTar, 0.25)
-
-    this.camera.position.copy(this.followCamPos)
-    this.controls.target.copy(this.followCamTar)
-  }
-
-  /* ========== Interactions ========== */
-
-  pick (event) {
-    const rect = this.renderer.domElement.getBoundingClientRect()
-    this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
-    this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
-    this.raycaster.setFromCamera(this.pointer, this.camera)
-
-    const hits = this.raycaster.intersectObjects(this.clickables, true)
-    if (!hits.length) {
-      this.emit('empty-click')
-      return
-    }
-
-    let o = hits[0].object
-    while (o && !o.userData.meta) o = o.parent
-    if (!o) return
-
-    const m = o.userData.meta
-    if (m.camera) this.flyTo(m.camera.position, m.camera.target, 1)
-    this.emit('select', {
-      title: m.title,
-      payload: m,
-      pointer: { x: event.clientX - rect.left, y: event.clientY - rect.top }
-    })
-    if (m.action === 'drill') this.drillTo(m.drillSceneId, m.id)
-  }
-
-  /* ========== Camera ========== */
-
-  flyTo (position, target, duration = 1.2) {
-    // Any manual camera command exits follow mode
-    this.followMode = false
-    this.fly = {
-      fromPos: this.camera.position.clone(),
-      fromTar: this.controls.target.clone(),
-      toPos: new THREE.Vector3(...position),
-      toTar: new THREE.Vector3(...target),
-      duration,
-      elapsed: 0
-    }
-  }
-
-  updateFly (dt) {
-    if (!this.fly) return
-    this.fly.elapsed += dt
-    const p = Math.min(1, this.fly.elapsed / Math.max(this.fly.duration, 0.01))
-    const e = easeInOutCubic(p)
-    this.camera.position.lerpVectors(this.fly.fromPos, this.fly.toPos, e)
-    this.controls.target.lerpVectors(this.fly.fromTar, this.fly.toTar, e)
-    if (p >= 1) this.fly = null
-  }
-
-  clampCamera () {
-    this.camera.position.y = Math.max(this.camera.position.y, 8)
-    if (this.followMode) return
-    const max = this.controls.maxDistance || 180
-    const dist = this.camera.position.distanceTo(this.controls.target)
-    if (dist > max + 4) {
-      const dir = this.camera.position.clone().sub(this.controls.target).normalize()
-      this.camera.position.copy(this.controls.target.clone().add(dir.multiplyScalar(max)))
-    }
-  }
-
-  /* ========== Focus presets ========== */
-
-  focusPreset (name) {
-    // In robot mode, 'follow' triggers follow mode instead of flying to a fixed position
-    if (this.mode === 'robot' && name === 'follow') {
-      this.startFollow()
-      return
-    }
-    const p = this.currentConfig.cameraPresets?.[name]
-    if (p) this.flyTo(p.position, p.target, 1.2)
-  }
-
-  focusNode (id) {
-    const item = this.nodes.get(id) || this.devices.get(id)
-    if (item?.meta.camera) this.flyTo(item.meta.camera.position, item.meta.camera.target, 1.1)
-  }
-
-  /* ========== Scene navigation ========== */
-
-  drillTo (sceneId, fromNodeId) {
-    if (!sceneId) return
-    if (this.sceneStack[this.sceneStack.length - 1] !== sceneId) {
-      this.sceneStack.push(sceneId)
-    }
-    this.emit('drill-down', { title: `下钻：${sceneId}`, sceneId, fromNodeId })
-    this.loadScene(sceneId)
-  }
-
-  backScene () {
-    if (this.sceneStack.length > 1) this.sceneStack.pop()
-    const id = this.sceneStack[this.sceneStack.length - 1]
-    this.emit('back-scene', { title: `返回：${id}`, sceneId: id })
-    this.loadScene(id)
-  }
-
-  /* ========== Alarm ========== */
+  /* ══════════════════════════════════════════
+   *  告警
+   * ══════════════════════════════════════════ */
 
   showAlarm (id) {
-    const item = this.devices.get(id) ||
-      [...this.devices.values()].find(v => v.meta.alarm) ||
-      this.devices.get('robot')
+    const item = this.interactions.getDevice(id) ||
+      this.interactions.getAllDevices().find(v => v.meta.alarm) ||
+      this.interactions.getDevice('robot')
     if (!item) return
 
-    const s = new THREE.Mesh(
-      new THREE.SphereGeometry(11, 32, 16),
-      new THREE.MeshBasicMaterial({ color: 0xff554f, transparent: true, opacity: 0.24, wireframe: true })
+    this.effects.showAlarm(
+      item,
+      this.sceneManager.robot,
+      (pos, tar) => this.cameraCtrl.flyTo(pos, tar, 1)
     )
-    this.layers.alarm.add(s)
-
-    const key = `alarm_${item.meta.id || Date.now()}`
-    const start = performance.now()
-    const isRobot = item.meta.id === 'robot'
-    const world = new THREE.Vector3()
-
-    this.animations.set(key, t => {
-      // If targeting the robot, follow its position every frame
-      if (isRobot && this.robot) {
-        this.robot.getWorldPosition(world)
-        s.position.copy(world)
-        s.position.y += 5
-      } else {
-        // Static device: set position once
-        if (!s.userData.positioned) {
-          item.object.getWorldPosition(world)
-          s.position.copy(world)
-          s.position.y += 4
-          s.userData.positioned = true
-        }
-      }
-      s.scale.setScalar(1 + Math.sin(t * 6.5) * 0.2)
-      if (performance.now() - start > 9000) {
-        this.layers.alarm.remove(s)
-        this.animations.delete(key)
-      }
-    })
-
-    if (item.meta.camera) this.flyTo(item.meta.camera.position, item.meta.camera.target, 1)
     this.emit('alarm', { title: item.meta.title, id: item.meta.id })
-  }
-
-  /* ========== Tour system ========== */
-
-  startTour () {
-    this.tour = { active: true, index: -1, wait: 0, paused: false }
-    this.nextTour()
-  }
-
-  stopTour () {
-    this.tour.active = false
-    this.tour.paused = false
-  }
-
-  nextTour () {
-    const steps = this.config.tours?.[this.currentSceneId] || []
-    if (!steps.length) return
-    this.tour.index = (this.tour.index + 1) % steps.length
-    const step = steps[this.tour.index]
-    this.execute(step.command)
-    this.tour.wait = step.hold || 4
-    this.emit('tour-view', { title: step.title })
-  }
-
-  updateTour (dt) {
-    if (!this.tour.active || this.tour.paused) return
-    this.tour.wait -= dt
-    if (this.tour.wait <= 0) this.nextTour()
   }
 }
