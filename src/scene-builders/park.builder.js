@@ -116,6 +116,41 @@ function addRoads (models, layers) {
       center.position.set(x, 0.16, z)
       layers.addTo('base', center)
     }
+
+    // 道路扫描脉冲（仅对主干道添加）
+    const isWide = w > 80 || d > 80
+    if (isWide) {
+      const pulseLen = Math.max(w, d) * 0.4
+      const pulseWid = 1.8
+      const pulseGeo = new THREE.PlaneGeometry(
+        w > d ? pulseLen : pulseWid,
+        w > d ? pulseWid : pulseLen
+      )
+      const pulseMat = new THREE.MeshBasicMaterial({
+        color: 0x00f5ff,
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      })
+      const pulse = new THREE.Mesh(pulseGeo, pulseMat)
+      pulse.rotation.x = -Math.PI / 2
+      pulse.position.set(x, 0.35, z)
+      layers.addTo('effect', pulse)
+
+      const roadIndex = (x + z) * 0.1 % 10
+      anims.register(`pulse_road_${x}_${z}`, (t) => {
+        const cycle = (t * 0.25 + roadIndex) % 1
+        if (w > d) {
+          pulse.position.x = x + (cycle - 0.5) * w * 0.8
+          pulse.position.z = z
+        } else {
+          pulse.position.z = z + (cycle - 0.5) * d * 0.8
+          pulse.position.x = x
+        }
+        pulseMat.opacity = Math.sin(cycle * Math.PI) * 0.35
+      })
+    }
   })
 }
 
@@ -292,22 +327,40 @@ function createBuilding (b, models, layers, anims, interactions) {
     })
   }
 
-  // 窗户
-  const winColor = alarm ? 0x442222 : 0x1a5a7a
+  // 窗户 — 呼吸光效
+  const winColor = alarm ? 0xff554f : 0x1a5a7a
   const winRows = floors
   const winCols = Math.max(2, Math.floor(w / 8))
+  const windowsList = [] // 收集窗户引用用于动画
   for (let row = 0; row < winRows; row++) {
     for (let col = 0; col < winCols; col++) {
       const wy = (h / floors) * (row + 0.5)
       const wx = -w / 2 + (w / winCols) * (col + 0.5)
       const win = new THREE.Mesh(
         new THREE.PlaneGeometry(w / winCols * 0.6, h / floors * 0.45),
-        new THREE.MeshBasicMaterial({ color: winColor, transparent: true, opacity: 0.18, side: THREE.DoubleSide })
+        new THREE.MeshStandardMaterial({
+          color: winColor,
+          emissive: alarm ? 0xff554f : 0x00eaff,
+          emissiveIntensity: 0.1,
+          transparent: true,
+          opacity: 0.18,
+          side: THREE.DoubleSide
+        })
       )
       win.position.set(wx, wy, d / 2 + 0.07)
+      windowsList.push(win)
       g.add(win)
     }
   }
+
+  // 建筑呼吸动画（offset 根据 building id 计算，实现错落效果）
+  const buildingOffset = (b.id || '0').charCodeAt(0) * 0.7
+  anims.register(`win_${b.id}`, (t) => {
+    const ei = alarm
+      ? 0.3 + Math.sin(t * 3 + buildingOffset) * 0.2        // 告警：快闪红色
+      : 0.1 + Math.sin(t * 0.5 + buildingOffset) * 0.06      // 正常：慢呼吸
+    windowsList.forEach(w => { w.material.emissiveIntensity = ei })
+  })
 
   // 角柱
   const pillarMat = new THREE.MeshStandardMaterial({
@@ -385,6 +438,24 @@ function createBuilding (b, models, layers, anims, interactions) {
   const lab = models.createLabel(`${b.title} ${alarm ? '⚠' : '●'} ${b.status}`, alarm)
   lab.position.set(0, h + 9, 0)
   g.add(lab)
+
+  // 顶部光柱
+  const beamGeo = new THREE.CylinderGeometry(0.6, 0.6, 35, 8)
+  const beamMat = new THREE.MeshBasicMaterial({
+    color: alarm ? 0xff554f : 0xeeffff,
+    transparent: true,
+    opacity: alarm ? 0.06 : 0.04,
+    depthWrite: false
+  })
+  const beam = new THREE.Mesh(beamGeo, beamMat)
+  beam.position.set(0, h + 19.5, 0)
+  beam.name = `pillar_${b.id}`
+  g.add(beam)
+
+  // 光柱微弱波动
+  anims.register(`pillar_${b.id}`, (t) => {
+    beamMat.opacity = (alarm ? 0.05 : 0.03) + Math.sin(t * 0.3 + buildingOffset) * 0.02
+  })
 
   // 地面光圈
   const ring = models.createRing(alarm ? 12 : 9, alarm ? 0xff554f : 0x00f5ff)
