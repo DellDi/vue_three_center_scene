@@ -42,10 +42,30 @@ export default function buildRobotScene (cfg, managers, options = {}) {
   // ── 4. 规划路径 ──
   const { waypoints, trailBuf, trailGeo } = createRobotPath(cfg.waypoints, models, layers, anims)
 
+  // 热力图覆盖网格
+  const cellSize = 6
+  const heatGrid = []
+  cfg.rooms.forEach(r => {
+    const [rx, rz] = r.position
+    const [rw, rd] = r.size
+    const cols = Math.ceil(rw / cellSize)
+    const rows = Math.ceil(rd / cellSize)
+    for (let ci = 0; ci < cols; ci++) {
+      for (let ri = 0; ri < rows; ri++) {
+        heatGrid.push({
+          x: rx - rw / 2 + cellSize * (ci + 0.5),
+          z: rz - rd / 2 + cellSize * (ri + 0.5),
+          size: cellSize,
+          covered: false
+        })
+      }
+    }
+  })
+
   // ── 5. 机器人模型 ──
   const { robot, motion } = createRobot(waypoints, options, models, layers, anims, interactions)
 
-  return { robot, motion, waypoints, trailBuf, trailGeo }
+  return { robot, motion, waypoints, trailBuf, trailGeo, heatGrid }
 }
 
 /* ========== 功能区 ========== */
@@ -226,7 +246,12 @@ function createRobotPath (wps, models, layers, anims) {
       const u = (idx / 16 + t * 0.025) % 1
       dot.position.copy(curve.getPoint(u))
       dot.position.y = 1.65
-      dot.material.opacity = 0.45 + Math.sin(t * 4 + idx) * 0.3
+      // 前方粒子亮、后方暗
+      const progress = (window.__robotMotionProgress || 0) / 100
+      const particleProgress = idx / 16
+      const isAhead = particleProgress > progress || (particleProgress < 0.05 && progress > 0.95)
+      const baseOpacity = isAhead ? 0.6 : 0.2
+      dot.material.opacity = baseOpacity + Math.sin(t * 4 + idx) * 0.2
     })(i))
   }
 
@@ -314,6 +339,19 @@ function createRobot (waypoints, options, models, layers, anims, interactions) {
   groundGlow.rotation.x = -Math.PI / 2
   groundGlow.position.y = 0.08
 
+  // 状态光环 — 颜色随电量变化
+  const statusRingGeo = new THREE.RingGeometry(5.5, 6.5, 64)
+  const statusRingMat = new THREE.MeshBasicMaterial({
+    color: 0x26f2a3,
+    transparent: true,
+    opacity: 0.35,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  })
+  const statusRing = new THREE.Mesh(statusRingGeo, statusRingMat)
+  statusRing.rotation.x = -Math.PI / 2
+  statusRing.position.y = 0.12
+
   // 检测光环
   const halo = new THREE.Mesh(
     new THREE.SphereGeometry(7, 32, 14),
@@ -325,8 +363,9 @@ function createRobot (waypoints, options, models, layers, anims, interactions) {
   const lab = models.createLabel('GX-001')
   lab.position.set(0, 8.5, 0)
 
-  robot.add(body, bumper, dome, lidar, front, led, brush, groundGlow, halo, lab)
+  robot.add(body, bumper, dome, lidar, front, led, brush, groundGlow, statusRing, halo, lab)
   robot.position.copy(waypoints[0].vector)
+  robot.userData.battery = 76
   layers.addTo('device', robot)
 
   // 运动状态机
@@ -345,6 +384,16 @@ function createRobot (waypoints, options, models, layers, anims, interactions) {
   anims.register('led', t => { led.material.opacity = 0.6 + Math.sin(t * 5) * 0.4 })
   anims.register('halo', t => { halo.scale.setScalar(1 + Math.sin(t * 4.2) * 0.1) })
   anims.register('groundGlow', t => { groundGlow.material.opacity = 0.08 + Math.sin(t * 3) * 0.04 })
+  anims.register('statusRing', (t) => {
+    const battery = robot.userData.battery || 76
+    let color
+    if (battery > 50) color = new THREE.Color(0x26f2a3)
+    else if (battery > 30) color = new THREE.Color(0xffb642)
+    else color = new THREE.Color(0xff554f)
+    statusRingMat.color.copy(color)
+    statusRingMat.opacity = 0.25 + Math.sin(t * 4) * 0.1
+    statusRing.scale.setScalar(1 + Math.sin(t * 3) * 0.03)
+  })
   anims.register('wheels', (t, dt) => {
     if (!motion.paused && motion.dwell <= 0) {
       wheels.forEach(w => { w.rotation.x += dt * 6 })
