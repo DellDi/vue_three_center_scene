@@ -55,8 +55,8 @@ export default class CameraController {
     this.controls = controls
     this.renderer = renderer
 
-    // ── 飞行状态 ──
-    this.fly = null // { fromPos, fromTar, toPos, toTar, duration, elapsed }
+    // ── 飞行状态（重构为多段路径）──
+    this.fly = null // { segments: [...], index: 0, holdRemaining: 0, elapsed: 0 }
 
     // ── 跟随状态（机器人模式）──
     this.followMode = false
@@ -77,6 +77,28 @@ export default class CameraController {
   /* ========== 飞行动画 ========== */
 
   /**
+   * 多段路径飞行（新增）
+   *
+   * @param {Array} segments  段数组，每段 { position, target, duration, hold }
+   *   hold: 到达后停留秒数（可选，默认 0）
+   */
+  flyPath (segments) {
+    if (!segments || !segments.length) return
+    this.followMode = false
+    this.fly = {
+      segments: segments.map(s => ({
+        toPos: new THREE.Vector3(...s.position),
+        toTar: new THREE.Vector3(...s.target),
+        duration: Math.max(s.duration, 0.01),
+        hold: s.hold || 0
+      })),
+      index: 0,
+      elapsed: 0,
+      holdRemaining: 0
+    }
+  }
+
+  /**
    * 平滑飞到目标位置和朝向
    *
    * @param {number[]} position  目标坐标 [x, y, z]
@@ -89,33 +111,62 @@ export default class CameraController {
    *   用 lerpVectors 在起点和终点之间插值
    */
   flyTo (position, target, duration = 1.2) {
-    this.followMode = false
-    this.fly = {
-      fromPos: this.camera.position.clone(),
-      fromTar: this.controls.target.clone(),
-      toPos: new THREE.Vector3(...position),
-      toTar: new THREE.Vector3(...target),
-      duration,
-      elapsed: 0
-    }
+    this.flyPath([{ position, target, duration }])
   }
 
   /**
-   * 每帧更新飞行动画（由 SceneRuntime.loop 调用）
-   *
-   * lerpVectors(a, b, t)：
-   *   t=0 → 在 a 位置
-   *   t=0.5 → 在 a 和 b 中间
-   *   t=1 → 在 b 位置
+   * 每帧更新飞行动画（多段路径版）
    */
   updateFly (dt) {
     if (!this.fly) return
+    const segs = this.fly.segments
+    if (this.fly.index >= segs.length) { this.fly = null; return }
+
+    const cur = segs[this.fly.index]
+
+    // 停留阶段
+    if (this.fly.holdRemaining > 0) {
+      this.fly.holdRemaining -= dt
+      if (this.fly.holdRemaining <= 0) {
+        this.fly.index++
+        this.fly.elapsed = 0
+      }
+      return
+    }
+
+    // 飞行阶段
     this.fly.elapsed += dt
-    const p = Math.min(1, this.fly.elapsed / Math.max(this.fly.duration, 0.01))
+    const p = Math.min(1, this.fly.elapsed / cur.duration)
     const e = easeInOutCubic(p)
-    this.camera.position.lerpVectors(this.fly.fromPos, this.fly.toPos, e)
-    this.controls.target.lerpVectors(this.fly.fromTar, this.fly.toTar, e)
-    if (p >= 1) this.fly = null // 到达目标，结束飞行
+
+    // 段起点：上一段的终点，或当前相机位置
+    const fromPos = this.fly.index === 0 && this.fly.elapsed <= dt + 0.001
+      ? this.camera.position.clone()
+      : (this._lastSegmentEndPos || this.camera.position.clone())
+    const fromTar = this.fly.index === 0 && this.fly.elapsed <= dt + 0.001
+      ? this.controls.target.clone()
+      : (this._lastSegmentEndTar || this.controls.target.clone())
+
+    if (p < 1) {
+      this.camera.position.lerpVectors(fromPos, cur.toPos, e)
+      this.controls.target.lerpVectors(fromTar, cur.toTar, e)
+    }
+
+    if (p >= 1) {
+      // 精确到达
+      this.camera.position.copy(cur.toPos)
+      this.controls.target.copy(cur.toTar)
+      this._lastSegmentEndPos = cur.toPos.clone()
+      this._lastSegmentEndTar = cur.toTar.clone()
+      // 进入停留或下一段
+      if (cur.hold > 0) {
+        this.fly.holdRemaining = cur.hold
+        this.fly.elapsed = 0
+      } else {
+        this.fly.index++
+        this.fly.elapsed = 0
+      }
+    }
   }
 
   /* ========== 跟随模式 ========== */
