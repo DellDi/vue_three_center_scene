@@ -66,7 +66,28 @@ export default {
       chapterTimer: null
     }
   },
+  watch: {
+    // v-show 切换时触发 resize，修复画布 0x0 导致的黑屏
+    active (val) {
+      this.$nextTick(() => {
+        const ref = val === 'iot' ? 'iotScene' : 'robotScene'
+        const scene = this.$refs[ref]
+        if (scene && scene.runtime) {
+          this._resizeScene(scene)
+        }
+      })
+    }
+  },
   methods: {
+    _resizeScene (scene) {
+      const host = scene.$el?.querySelector('.host')
+      if (!host || !scene.runtime) return
+      const w = host.clientWidth || 1
+      const h = host.clientHeight || 1
+      if (scene.runtime.cameraCtrl) scene.runtime.cameraCtrl.resize(w, h)
+      if (scene.runtime.labelRenderer) scene.runtime.labelRenderer.setSize(w, h)
+      if (scene.runtime.renderer) scene.runtime.renderer.setSize(w, h)
+    },
     handleSceneEvent (event) {
       this.latestEvent = `[${event.type}] ${event.title || event.id || ''}`
 

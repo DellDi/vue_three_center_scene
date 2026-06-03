@@ -217,11 +217,24 @@ export default class SceneRuntime {
         if (result === '__follow__') {
           this.cameraCtrl.startFollow(this.sceneManager.robot)
         }
+        // 自动弹出最近节点/设备的标识
+        this._showNearestMarker()
       },
       FOCUS_NODE: (cmd) => {
         const item = this.interactions.getNode(cmd.nodeId) ||
                      this.interactions.getDevice(cmd.nodeId)
         this.cameraCtrl.focusNode(item)
+        // 自动弹出聚焦目标的标识信息
+        if (item?.meta) {
+          this.emit('select', {
+            title: item.meta.title,
+            payload: item.meta,
+            pointer: {
+              x: this.container.clientWidth / 2,
+              y: this.container.clientHeight / 3
+            }
+          })
+        }
       },
       DRILL_TO: (cmd) => {
         this.drillTo(cmd.sceneId, cmd.fromNodeId)
@@ -650,6 +663,51 @@ export default class SceneRuntime {
       (pos, tar) => this.cameraCtrl.flyTo(pos, tar, 1)
     )
     this.emit('alarm', { title: item.meta.title, id: item.meta.id })
+  }
+
+  /* ══════════════════════════════════════════
+   *  自动标识弹出
+   * ══════════════════════════════════════════ */
+
+  /**
+   * 视角切换后自动弹出最近的节点/设备标识
+   * 优先匹配 nodes（建筑/房间），否则匹配 devices（设备）
+   */
+  _showNearestMarker () {
+    const camTarget = this.cameraCtrl.controls.target
+    let bestItem = null
+    let bestDist = Infinity
+
+    // 遍历所有可点击节点
+    const allNodes = this.interactions.nodes
+    allNodes.forEach((item) => {
+      const wp = new THREE.Vector3()
+      item.object.getWorldPosition(wp)
+      const d = wp.distanceTo(camTarget)
+      if (d < bestDist) { bestDist = d; bestItem = item }
+    })
+
+    // 如果最近节点距离 > 60，尝试匹配设备
+    if (!bestItem || bestDist > 60) {
+      this.interactions.devices.forEach((item) => {
+        const wp = new THREE.Vector3()
+        item.object.getWorldPosition(wp)
+        const d = wp.distanceTo(camTarget)
+        if (d < bestDist) { bestDist = d; bestItem = item }
+      })
+    }
+
+    // 距离太远不弹（距离阈值 80）
+    if (bestItem && bestDist < 80 && bestItem.meta) {
+      this.emit('select', {
+        title: bestItem.meta.title,
+        payload: bestItem.meta,
+        pointer: {
+          x: this.container.clientWidth / 2,
+          y: this.container.clientHeight / 3
+        }
+      })
+    }
   }
 
   /* ══════════════════════════════════════════
