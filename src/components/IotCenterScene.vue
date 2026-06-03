@@ -1,11 +1,19 @@
 <template>
   <div class="scene-panel" :style="{ height }">
     <div class="head"><div><b>{{ title }}</b><span>{{ subtitle }}</span></div><div class="badges"><i>在线 26</i><i>告警 3</i><i>点位 42</i></div></div>
-    <div class="toolbar"><button @click="cmd({ type: 'BACK_SCENE' })">返回上级</button><button @click="cmd({ type: 'FOCUS_PRESET', preset: 'default' })">总览</button><button @click="cmd({ type: 'FOCUS_PRESET', preset: 'fire' })">消防视角</button><button @click="cmd({ type: 'FOCUS_PRESET', preset: 'security' })">安防视角</button><button @click="cmd({ type: 'FOCUS_PRESET', preset: 'room' })">设备房视角</button><button :class="{ active: tourActive }" @click="toggleTour">{{ tourActive ? '停止导览' : '自动导览' }}</button><button class="danger" @click="cmd({ type: 'SHOW_ALARM' })">告警联动</button></div>
+    <div class="toolbar">
+      <button v-if="floorMode" @click="cmd({ type: 'BACK_SCENE' })">返回上级</button>
+      <button @click="cmd({ type: 'FOCUS_PRESET', preset: 'default' })">总览</button>
+      <button @click="cmd({ type: 'FOCUS_PRESET', preset: 'fire' })">消防视角</button>
+      <button @click="cmd({ type: 'FOCUS_PRESET', preset: 'security' })">安防视角</button>
+      <button @click="cmd({ type: 'FOCUS_PRESET', preset: 'room' })">设备房视角</button>
+      <button :class="{ active: tourActive }" @click="toggleTour">{{ tourActive ? '暂停导览' : '自动导览' }}</button>
+      <button class="danger" @click="cmd({ type: 'SHOW_ALARM' })">告警联动</button>
+    </div>
     <div ref="host" class="host"></div>
     <div v-show="tip.show" class="tip" :class="{ alarm: tip.alarm }" :style="{ left: tip.x + 'px', top: tip.y + 'px' }"><h4>{{ tip.title }}</h4><p>类型：{{ tip.type }}</p><p>位置：{{ tip.location }}</p><p>状态：<em>{{ tip.status }}</em></p><small>{{ tip.desc }}</small></div>
     <div class="side"><h4>场景结构</h4><p v-for="i in sideList" :key="i.name"><span>{{ i.name }}</span><b>{{ i.status }}</b></p></div>
-    <div class="hint">已拆为 Runtime / Config，后续接 glb 模型时优先替换建模层。</div>
+    <div class="hint">支持楼栋下钻、楼层内部视角、设备点位交互与告警联动。</div>
   </div>
 </template>
 
@@ -16,13 +24,58 @@ import config from '../scene-config/iotScene.config'
 export default {
   name: 'IotCenterScene',
   props: { height: { type: String, default: '620px' }, autoPlay: { type: Boolean, default: false } },
-  data () { return { title: '设备场景总览', subtitle: '园区视角：点击楼栋下钻到楼层内部', tourActive: false, tip: { show: false }, sideList: [{ name: '园区场景', status: 'park' }, { name: '楼层内部', status: 'floor' }, { name: '统一命令', status: 'command' }, { name: '图层管理', status: 'layer' }] } },
-  mounted () { this.runtime = new SceneRuntime({ container: this.$refs.host, config, mode: 'iot', onEvent: this.handleRuntimeEvent }); this.runtime.start(config.startSceneId); if (this.autoPlay) setTimeout(() => this.toggleTour(), 1500) },
+  data () {
+    return {
+      title: '设备场景总览',
+      subtitle: '园区视角：点击楼栋下钻到楼层内部',
+      floorMode: false,
+      tourActive: false,
+      tip: { show: false },
+      sideList: [
+        { name: '1号设备房', status: '正常' },
+        { name: '水泵房', status: '液位偏高' },
+        { name: '配电房', status: '温度偏高' },
+        { name: '消防通道', status: '在线' }
+      ]
+    }
+  },
+  mounted () {
+    this.runtime = new SceneRuntime({ container: this.$refs.host, config, mode: 'iot', onEvent: this.handleRuntimeEvent })
+    this.runtime.start(config.startSceneId)
+    if (this.autoPlay) setTimeout(() => this.toggleTour(), 1500)
+  },
   beforeDestroy () { if (this.runtime) this.runtime.dispose() },
   methods: {
     cmd (command) { if (this.runtime) this.runtime.execute(command) },
     toggleTour () { this.tourActive = !this.tourActive; this.cmd({ type: this.tourActive ? 'START_TOUR' : 'STOP_TOUR' }) },
-    handleRuntimeEvent (event) { this.$emit('scene-event', event); if (event.type === 'select' && event.payload) this.tip = Object.assign({ show: true, x: event.pointer.x, y: event.pointer.y }, event.payload); if (event.type === 'empty-click') this.tip.show = false; if (event.type === 'scene-change') { const scene = config.scenes[event.sceneId]; this.title = scene.title; this.subtitle = scene.subtitle } }
+    handleRuntimeEvent (event) {
+      this.$emit('scene-event', event)
+      if (event.type === 'select' && event.payload) {
+        this.tip = Object.assign({ show: true, x: event.pointer.x, y: event.pointer.y }, event.payload)
+      }
+      if (event.type === 'empty-click') this.tip.show = false
+      if (event.type === 'scene-change') {
+        const scene = config.scenes[event.sceneId]
+        this.title = scene.title
+        this.subtitle = scene.subtitle
+        this.floorMode = scene.type === 'floor'
+        if (scene.type === 'floor') {
+          this.sideList = [
+            { name: '公共走廊摄像头', status: '在线' },
+            { name: '水泵房液位', status: '液位偏高' },
+            { name: '配电房温度', status: '温度偏高' },
+            { name: '消防烟感', status: '正常' }
+          ]
+        } else {
+          this.sideList = [
+            { name: '1号设备房', status: '正常' },
+            { name: '水泵房', status: '液位偏高' },
+            { name: '配电房', status: '温度偏高' },
+            { name: '消防通道', status: '在线' }
+          ]
+        }
+      }
+    }
   }
 }
 </script>

@@ -1,11 +1,11 @@
 <template>
   <div class="scene-panel" :style="{ height }">
-    <div class="head"><div><b>实时清洁轨迹</b><span>机器人会在关键区域停留，模拟真实清洁、避障、覆盖与回充节奏</span></div><div class="badges"><i>任务 {{ taskStatus }}</i><i>进度 {{ progressText }}</i><i>电量 {{ battery }}%</i></div></div>
-    <div class="toolbar"><button @click="cmd({ type: 'FOCUS_PRESET', preset: 'top' })">楼层俯视</button><button @click="cmd({ type: 'FOCUS_PRESET', preset: 'follow' })">机器人跟随</button><button @click="cmd({ type: 'FOCUS_PRESET', preset: 'charge' })">充电区</button><button @click="togglePause">{{ paused ? '继续任务' : '暂停任务' }}</button><button :class="{ active: tourActive }" @click="toggleTour">{{ tourActive ? '停止导览' : '自动导览' }}</button><button class="danger" @click="cmd({ type: 'SHOW_ALARM', deviceId: 'robot' })">模拟余量告警</button></div>
+    <div class="head"><div><b>实时清洁轨迹</b><span>机器人在关键区域执行清洁任务，支持避障、覆盖与自动回充</span></div><div class="badges"><i>任务 {{ taskStatus }}</i><i>进度 {{ progressText }}</i><i>电量 {{ battery }}%</i></div></div>
+    <div class="toolbar"><button @click="cmd({ type: 'FOCUS_PRESET', preset: 'top' })">楼层俯视</button><button @click="cmd({ type: 'FOLLOW_ROBOT' })">机器人跟随</button><button @click="cmd({ type: 'FOCUS_PRESET', preset: 'charge' })">充电区</button><button @click="togglePause">{{ paused ? '继续任务' : '暂停任务' }}</button><button :class="{ active: tourActive }" @click="toggleTour">{{ tourActive ? '暂停导览' : '自动导览' }}</button><button class="danger" @click="cmd({ type: 'SHOW_ALARM', deviceId: 'robot' })">余量告警</button></div>
     <div ref="host" class="host"></div>
     <div v-show="tip.show" class="tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }"><h4>{{ tip.title }}</h4><p>类型：{{ tip.type }}</p><p>位置：{{ tip.location }}</p><p>状态：<em>{{ tip.status }}</em></p><small>{{ tip.desc }}</small></div>
     <div class="task"><h4>当前清洁节点</h4><strong>{{ currentNodeName }}</strong><p><span>行驶速度</span><b>{{ speedText }}</b></p><p><span>停留倒计时</span><b>{{ dwellText }}</b></p><p><span>当前模式</span><b>{{ paused ? '暂停' : taskStatus }}</b></p><div class="bar"><i :style="{ width: progressText }"></i></div></div>
-    <div class="hint">机器人任务、路线、停留、导览已由配置和 Runtime 驱动，后续可直接替换为真实轨迹。</div>
+    <div class="hint">支持实时轨迹跟踪、关键区域停留清洁、自动回充与告警联动。</div>
   </div>
 </template>
 
@@ -15,9 +15,9 @@ import config from '../scene-config/robotScene.config'
 
 export default {
   name: 'RobotCenterScene',
-  props: { height: { type: String, default: '620px' }, robotSpeed: { type: Number, default: 2 }, dwellScale: { type: Number, default: 1 }, autoPlay: { type: Boolean, default: false } },
+  props: { height: { type: String, default: '620px' }, robotSpeed: { type: Number, default: 7 }, dwellScale: { type: Number, default: 1 }, autoPlay: { type: Boolean, default: true } },
   data () { return { paused: false, tourActive: false, taskStatus: '执行中', currentNodeName: '大堂前厅', battery: 76, progress: 0, dwellLeft: 0, currentSpeed: 0, tip: { show: false } } },
-  computed: { progressText () { return Math.max(0, Math.min(100, Math.round(this.progress))) + '%' }, dwellText () { return this.dwellLeft > 0 ? this.dwellLeft.toFixed(1) + 's' : '行进中' }, speedText () { return this.currentSpeed <= 0.05 ? '0.0 m/s' : '0.8 m/s' } },
+  computed: { progressText () { return Math.max(0, Math.min(100, Math.round(this.progress))) + '%' }, dwellText () { return this.dwellLeft > 0 ? this.dwellLeft.toFixed(1) + 's' : '行进中' }, speedText () { return this.currentSpeed <= 0.05 ? '0.0 m/s' : (this.currentSpeed * 0.085).toFixed(1) + ' m/s' } },
   mounted () { this.runtime = new SceneRuntime({ container: this.$refs.host, config, mode: 'robot', options: { robotSpeed: this.robotSpeed, dwellScale: this.dwellScale }, onEvent: this.handleRuntimeEvent }); this.runtime.start(config.startSceneId); if (this.autoPlay) setTimeout(() => this.toggleTour(), 1500) },
   beforeDestroy () { if (this.runtime) this.runtime.dispose() },
   methods: {
