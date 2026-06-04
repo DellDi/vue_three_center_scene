@@ -66,6 +66,7 @@ import ResourceTracker from './ResourceTracker'
 import ParticleSystem from './ParticleSystem'
 import PortalTransition from './PortalTransition'
 import DemoDirector from './DemoDirector'
+import { getSceneTheme } from '../theme/sceneThemes'
 
 export default class SceneRuntime {
   /**
@@ -78,12 +79,13 @@ export default class SceneRuntime {
    * @param {Function}    params.onEvent   事件回调（发射给 Vue 组件）
    * @param {Object}      params.options   运行选项（robotSpeed 等）
    */
-  constructor ({ container, config, mode, onEvent, options }) {
+  constructor ({ container, config, mode, onEvent, options, themeName, theme }) {
     this.container = container
     this.config = config
     this.mode = mode
     this.options = options || {}
     this.onEvent = onEvent || (() => {})
+    this.theme = theme || getSceneTheme(themeName)
 
     // ═══════════════════════════════════════════
     // Step 1: 创建 Three.js 核心三件套
@@ -95,7 +97,7 @@ export default class SceneRuntime {
      * fog 添加雾效（远处物体逐渐消失，增加纵深感）
      */
     this.scene = new THREE.Scene()
-    this.scene.fog = new THREE.Fog(0x020811, 96, 310)
+    this.scene.fog = new THREE.Fog(this.theme.three.fog, 96, 310)
 
     /**
      * PerspectiveCamera — 透视相机
@@ -115,7 +117,7 @@ export default class SceneRuntime {
      */
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
-    this.renderer.setClearColor(0x020811, 1)
+    this.renderer.setClearColor(this.theme.three.clear, 1)
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     container.appendChild(this.renderer.domElement)
 
@@ -146,13 +148,13 @@ export default class SceneRuntime {
     // Step 2: 创建管理模块
     // ═══════════════════════════════════════════
 
-    const models = new ModelManager()
+    const models = new ModelManager(this.theme)
     const resources = new ResourceTracker()
     const anims = new AnimationManager()
     const layers = new LayerManager(this.scene)
     const camera = new CameraController(this.camera, this.controls, this.renderer)
     const interactions = new InteractionManager(this.camera, this.renderer.domElement)
-    const effects = new EffectManager(layers, anims)
+    const effects = new EffectManager(layers, anims, this.theme)
 
     // ── 粒子系统（仅园区场景显示）──
     const particles = new ParticleSystem(this.scene, {
@@ -163,7 +165,7 @@ export default class SceneRuntime {
     // ── 传送门转场 ──
     const portal = new PortalTransition(this.container)
 
-    const sceneManager = new SceneManager({ models, layers, anims, interactions, resources, effects })
+    const sceneManager = new SceneManager({ models, layers, anims, interactions, resources, effects, theme: this.theme })
     const commandBus = new CommandBus()
 
     // 保存引用
@@ -199,11 +201,12 @@ export default class SceneRuntime {
      * DirectionalLight — 平行光（模拟太阳光，有方向）
      * PointLight — 点光源（从一点向四周发散）
      */
-    this.scene.add(new THREE.AmbientLight(0xb7f8ff, 0.82))
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.25)
+    const lights = this.theme.three.lights
+    this.scene.add(new THREE.AmbientLight(lights.ambient, lights.ambientIntensity))
+    const dirLight = new THREE.DirectionalLight(lights.directional, lights.directionalIntensity)
     dirLight.position.set(80, 130, 70)
     this.scene.add(dirLight)
-    const pointLight = new THREE.PointLight(0x00f5ff, 4, 180)
+    const pointLight = new THREE.PointLight(lights.point, lights.pointIntensity, 180)
     pointLight.position.set(0, 48, 0)
     this.scene.add(pointLight)
 
@@ -718,7 +721,7 @@ export default class SceneRuntime {
   _playFloorScanRing () {
     const ringGeo = new THREE.TorusGeometry(60, 0.3, 16, 100)
     const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x00f5ff,
+      color: this.theme.three.effect.primary,
       transparent: true,
       opacity: 0.5,
       depthWrite: false
@@ -755,7 +758,7 @@ export default class SceneRuntime {
         const cellMesh = new THREE.Mesh(
           new THREE.PlaneGeometry(cell.size * 0.9, cell.size * 0.9),
           new THREE.MeshBasicMaterial({
-            color: 0x00f5ff,
+            color: this.theme.three.effect.primary,
             transparent: true,
             opacity: 0.08,
             side: THREE.DoubleSide,

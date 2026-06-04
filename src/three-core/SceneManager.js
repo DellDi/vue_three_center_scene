@@ -40,6 +40,7 @@ export default class SceneManager {
     this.interactions = managers.interactions
     this.resources = managers.resources
     this.effects = managers.effects
+    this.theme = managers.theme
 
     /** @type {Object} 当前场景配置 */
     this.currentConfig = null
@@ -92,7 +93,8 @@ export default class SceneManager {
       models: this.models,
       layers: this.layers,
       anims: this.anims,
-      interactions: this.interactions
+      interactions: this.interactions,
+      theme: this.theme
     }
 
     if (mode === 'robot') {

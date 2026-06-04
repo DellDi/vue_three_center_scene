@@ -41,9 +41,11 @@
  */
 import * as THREE from 'three'
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
+import { getSceneTheme } from '../theme/sceneThemes'
 
 export default class ModelManager {
-  constructor () {
+  constructor (theme) {
+    this.theme = theme || getSceneTheme()
     /**
      * GLB 模型缓存
      * key: 模型路径  value: GLTF scene
@@ -66,14 +68,15 @@ export default class ModelManager {
    *   metalness 0=非金属 1=金属 → 控制金属质感
    *   emissive → 自发光（不受场景灯光影响）
    */
-  createStandardMaterial (color, opacity = 0.78, emissive = 0x00384c) {
+  createStandardMaterial (color, opacity = 0.78, emissive) {
+    const material = this.theme.three.material
     return new THREE.MeshStandardMaterial({
-      color,
+      color: color ?? material.building,
       transparent: true,
       opacity,
       roughness: 0.46,
       metalness: 0.22,
-      emissive,
+      emissive: emissive ?? material.buildingEmissive,
       emissiveIntensity: 0.5
     })
   }
@@ -94,7 +97,7 @@ export default class ModelManager {
    * @param {number}     color   线框颜色
    * @param {number}     opacity 线框透明度
    */
-  addEdges (mesh, color = 0x00eaff, opacity = 0.7) {
+  addEdges (mesh, color = this.theme.three.effect.edge, opacity = 0.7) {
     const edgesGeo = new THREE.EdgesGeometry(mesh.geometry)
     const edgesMat = new THREE.LineBasicMaterial({
       color,
@@ -123,15 +126,16 @@ export default class ModelManager {
   createLabel (text, alarm = false) {
     const el = document.createElement('div')
     el.textContent = text
+    const css = this.theme.css
     el.style.cssText = [
-      'color:#eaffff',
+      `color:${alarm ? css.danger : css.text}`,
       'font-size:12px',
       'white-space:nowrap',
       'letter-spacing:1px',
-      `background:${alarm ? 'rgba(70,18,20,.92)' : 'rgba(1,22,32,.9)'}`,
-      `border:1px solid ${alarm ? 'rgba(255,85,79,.72)' : 'rgba(0,245,255,.55)'}`,
+      `background:${alarm ? css.dangerBg : css.cardBg}`,
+      `border:1px solid ${alarm ? css.danger : css.panelBorder}`,
       `padding:4px 10px`,
-      `box-shadow:0 0 12px ${alarm ? 'rgba(255,85,79,.25)' : 'rgba(0,245,255,.22)'}`,
+      `box-shadow:0 0 12px ${alarm ? css.dangerBg : css.primarySoft}`,
       'backdrop-filter:blur(2px)',
       'pointer-events:none',
       'border-radius:2px'
@@ -149,7 +153,7 @@ export default class ModelManager {
    *   animKey → 注册到 AnimationManager 的 key
    *   update  → 每帧调用 update(t) 驱动旋转
    */
-  createRing (radius, color = 0x00f5ff) {
+  createRing (radius, color = this.theme.three.effect.primary) {
     const group = new THREE.Group()
     const ringMesh = new THREE.Mesh(
       new THREE.RingGeometry(radius * 0.64, radius, 64),
@@ -186,15 +190,16 @@ export default class ModelManager {
   createGrid (size, w = 220, h = 220) {
     const group = new THREE.Group()
 
-    const grid = new THREE.GridHelper(size, 40, 0x00ffff, 0x0b4050)
+    const gridTheme = this.theme.three.grid
+    const grid = new THREE.GridHelper(size, 40, gridTheme.main, gridTheme.sub)
     grid.material.transparent = true
-    grid.material.opacity = 0.14
+    grid.material.opacity = gridTheme.opacity
     group.add(grid)
 
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(w, h),
       new THREE.MeshStandardMaterial({
-        color: 0x071520,
+        color: this.theme.three.material.ground,
         roughness: 0.82,
         metalness: 0.12,
         transparent: true,
@@ -223,15 +228,17 @@ export default class ModelManager {
    */
   createWallSegment (w, color) {
     const group = new THREE.Group()
+    const material = this.theme.three.material
+    const wallAccent = color ?? this.theme.three.effect.edge
     const dx = w.bx - w.ax
     const dz = w.by - w.az
     const len = Math.sqrt(dx * dx + dz * dz)
     const angle = Math.atan2(dx, dz)
 
     const wallMat = new THREE.MeshStandardMaterial({
-      color: 0x1a3a4a, transparent: true, opacity: 0.7,
+      color: material.wall, transparent: true, opacity: 0.7,
       roughness: 0.4, metalness: 0.3,
-      emissive: color, emissiveIntensity: 0.06
+      emissive: color ?? material.wallEmissive, emissiveIntensity: 0.06
     })
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(w.thick, w.h, len),
@@ -239,13 +246,13 @@ export default class ModelManager {
     )
     mesh.position.set((w.ax + w.bx) / 2, w.h / 2, (w.az + w.by) / 2)
     mesh.rotation.y = angle
-    this.addEdges(mesh, color, 0.38)
+    this.addEdges(mesh, wallAccent, 0.38)
     group.add(mesh)
 
     // 顶部发光条
     const strip = new THREE.Mesh(
       new THREE.BoxGeometry(w.thick + 0.1, 0.18, len),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45 })
+      new THREE.MeshBasicMaterial({ color: wallAccent, transparent: true, opacity: 0.45 })
     )
     strip.position.copy(mesh.position)
     strip.position.y = w.h + 0.09
@@ -265,25 +272,26 @@ export default class ModelManager {
    */
   createFurnitureItem (f) {
     let mesh
+    const furnitureColor = f.color ?? this.theme.three.material.furniture
     if (f.shape === 'cyl') {
       mesh = new THREE.Mesh(
         new THREE.CylinderGeometry(f.r, f.r * 1.1, f.h, 16),
         new THREE.MeshStandardMaterial({
-          color: f.color, roughness: 0.6, metalness: 0.15,
-          emissive: f.color, emissiveIntensity: 0.08
+          color: furnitureColor, roughness: 0.6, metalness: 0.15,
+          emissive: furnitureColor, emissiveIntensity: 0.08
         })
       )
     } else {
       mesh = new THREE.Mesh(
         new THREE.BoxGeometry(f.w, f.h, f.d),
         new THREE.MeshStandardMaterial({
-          color: f.color, roughness: 0.5, metalness: 0.2,
-          emissive: f.color, emissiveIntensity: 0.05
+          color: furnitureColor, roughness: 0.5, metalness: 0.2,
+          emissive: furnitureColor, emissiveIntensity: 0.05
         })
       )
     }
     mesh.position.set(f.x, f.y, f.z)
-    this.addEdges(mesh, 0x00eaff, 0.2)
+    this.addEdges(mesh, this.theme.three.effect.edge, 0.2)
     return mesh
   }
 
