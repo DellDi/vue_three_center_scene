@@ -235,7 +235,8 @@ body {
 }
 
 .switches button.active {
-  color: #fff;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
   background: var(--scene-button-active-bg, linear-gradient(180deg, #2d8cff, #126bff));
   box-shadow: inset 0 0 16px var(--scene-primary-soft, rgba(18, 107, 255, 0.14));
 }
@@ -270,6 +271,7 @@ body {
 /* Demo 按钮 */
 .demo-btn {
   color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
   background: var(--scene-button-active-bg, linear-gradient(180deg, #2d8cff, #126bff)) !important;
   border-color: var(--scene-primary, #126bff) !important;
   font-size: 15px;
