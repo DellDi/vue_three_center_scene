@@ -21,49 +21,50 @@ import * as THREE from 'three'
  * 构建园区场景
  *
  * @param {Object} cfg      场景配置（buildings, devices 等）
- * @param {Object} managers { models, layers, anims, interactions }
+ * @param {Object} managers { models, layers, anims, interactions, theme }
  * @returns {Object}        运行时引用（robot: null 园区不需要）
  */
 export default function buildParkScene (cfg, managers) {
-  const { models, layers, anims, interactions } = managers
+  const { models, layers, anims, interactions, theme } = managers
 
   // ── 1. 地面 ──
   layers.addTo('base', models.createGrid(210))
-  addParkGround(models, layers)
+  addParkGround(models, layers, theme)
 
   // ── 2. 道路 ──
-  addRoads(models, layers, anims)
+  addRoads(models, layers, anims, theme)
 
   // ── 3. 环境（树木、路灯、喷泉） ──
-  addParkEnvironment(models, layers, anims)
+  addParkEnvironment(models, layers, anims, theme)
 
   // ── 4. 建筑 ──
-  cfg.buildings.forEach(b => createBuilding(b, models, layers, anims, interactions))
+  cfg.buildings.forEach(b => createBuilding(b, models, layers, anims, interactions, theme))
 
   // ── 5. 设备点位 ──
-  cfg.devices.forEach(d => createDevice(d, models, layers, anims, interactions))
+  cfg.devices.forEach(d => createDevice(d, models, layers, anims, interactions, theme))
 
   return { robot: null }
 }
 
 /* ========== 地台 ========== */
 
-function addParkGround (models, layers) {
+function addParkGround (models, layers, theme) {
   const platform = new THREE.Mesh(
     new THREE.BoxGeometry(212, 0.3, 212),
     new THREE.MeshStandardMaterial({
-      color: 0x0a1820, roughness: 0.9, metalness: 0.05,
+      color: theme.three.material.platform, roughness: 0.9, metalness: 0.05,
       transparent: true, opacity: 0.92
     })
   )
   platform.position.y = 0.15
-  models.addEdges(platform, 0x0b3040, 0.18)
+  models.addEdges(platform, theme.three.effect.edge, 0.18)
   layers.addTo('base', platform)
 }
 
 /* ========== 道路网络 ========== */
 
-function addRoads (models, layers, anims) {
+function addRoads (models, layers, anims, theme) {
+  const { material, effect } = theme.three
   const roads = [[0, 8, 172, 12], [36, -10, 12, 128], [-46, 25, 84, 9], [64, 40, 58, 9]]
 
   roads.forEach(([x, z, w, d]) => {
@@ -71,7 +72,7 @@ function addRoads (models, layers, anims) {
     const surface = new THREE.Mesh(
       new THREE.PlaneGeometry(w, d),
       new THREE.MeshStandardMaterial({
-        color: 0x1a2a30, roughness: 0.92, metalness: 0.05,
+        color: material.road, roughness: 0.92, metalness: 0.05,
         transparent: true, opacity: 0.88, side: THREE.DoubleSide
       })
     )
@@ -80,7 +81,7 @@ function addRoads (models, layers, anims) {
     layers.addTo('base', surface)
 
     // 路缘发光线 + 分道线
-    const edgeColor = 0x00f5ff
+    const edgeColor = effect.edge
     if (w > d) {
       [-1, 1].forEach(s => {
         const edge = new THREE.Mesh(
@@ -93,7 +94,7 @@ function addRoads (models, layers, anims) {
       })
       const center = new THREE.Mesh(
         new THREE.PlaneGeometry(w, 0.2),
-        new THREE.MeshBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0.28, side: THREE.DoubleSide })
+        new THREE.MeshBasicMaterial({ color: effect.roadMark, transparent: true, opacity: 0.28, side: THREE.DoubleSide })
       )
       center.rotation.x = -Math.PI / 2
       center.position.set(x, 0.16, z)
@@ -110,7 +111,7 @@ function addRoads (models, layers, anims) {
       })
       const center = new THREE.Mesh(
         new THREE.PlaneGeometry(0.2, d),
-        new THREE.MeshBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0.28, side: THREE.DoubleSide })
+        new THREE.MeshBasicMaterial({ color: effect.roadMark, transparent: true, opacity: 0.28, side: THREE.DoubleSide })
       )
       center.rotation.x = -Math.PI / 2
       center.position.set(x, 0.16, z)
@@ -127,7 +128,7 @@ function addRoads (models, layers, anims) {
         w > d ? pulseWid : pulseLen
       )
       const pulseMat = new THREE.MeshBasicMaterial({
-        color: 0x00f5ff,
+        color: effect.primary,
         transparent: true,
         opacity: 0,
         side: THREE.DoubleSide,
@@ -156,7 +157,8 @@ function addRoads (models, layers, anims) {
 
 /* ========== 园区环境 ========== */
 
-function addParkEnvironment (models, layers, anims) {
+function addParkEnvironment (models, layers, anims, theme) {
+  const { material, effect } = theme.three
   // 树木
   const treePositions = [
     [-90, -50], [-70, -55], [50, -50], [80, -45],
@@ -197,21 +199,21 @@ function addParkEnvironment (models, layers, anims) {
   lightPositions.forEach(([x, z], i) => {
     const pole = new THREE.Mesh(
       new THREE.CylinderGeometry(0.15, 0.2, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0x4a5a6a, metalness: 0.6, roughness: 0.3 })
+      new THREE.MeshStandardMaterial({ color: material.furniture, metalness: 0.6, roughness: 0.3 })
     )
     pole.position.set(x, 4, z)
     layers.addTo('base', pole)
 
     const lamp = new THREE.Mesh(
       new THREE.SphereGeometry(0.5, 12, 8),
-      new THREE.MeshBasicMaterial({ color: 0xffeedd, transparent: true, opacity: 0.7 })
+      new THREE.MeshBasicMaterial({ color: material.ceilingLight, transparent: true, opacity: 0.7 })
     )
     lamp.position.set(x, 8.3, z)
     layers.addTo('base', lamp)
 
     const glow = new THREE.Mesh(
       new THREE.CircleGeometry(3, 16),
-      new THREE.MeshBasicMaterial({ color: 0xffeedd, transparent: true, opacity: 0.06, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: material.ceilingLight, transparent: true, opacity: 0.06, side: THREE.DoubleSide })
     )
     glow.rotation.x = -Math.PI / 2
     glow.position.set(x, 0.2, z)
@@ -226,17 +228,17 @@ function addParkEnvironment (models, layers, anims) {
   const fountain = new THREE.Mesh(
     new THREE.CylinderGeometry(5, 6, 1.2, 32),
     new THREE.MeshStandardMaterial({
-      color: 0x1a4a5a, roughness: 0.3, metalness: 0.4,
-      emissive: 0x003848, emissiveIntensity: 0.15
+      color: material.wall, roughness: 0.3, metalness: 0.4,
+      emissive: effect.water, emissiveIntensity: 0.15
     })
   )
   fountain.position.set(0, 0.6, 30)
-  models.addEdges(fountain, 0x00eaff, 0.35)
+  models.addEdges(fountain, effect.edge, 0.35)
   layers.addTo('base', fountain)
 
   const water = new THREE.Mesh(
     new THREE.CircleGeometry(4.5, 32),
-    new THREE.MeshBasicMaterial({ color: 0x00aacc, transparent: true, opacity: 0.3, side: THREE.DoubleSide })
+    new THREE.MeshBasicMaterial({ color: effect.water, transparent: true, opacity: 0.3, side: THREE.DoubleSide })
   )
   water.rotation.x = -Math.PI / 2
   water.position.set(0, 1.25, 30)
@@ -249,7 +251,7 @@ function addParkEnvironment (models, layers, anims) {
   for (let i = 0; i < 5; i++) {
     const slot = new THREE.Mesh(
       new THREE.PlaneGeometry(5, 10),
-      new THREE.MeshBasicMaterial({ color: 0x00f5ff, transparent: true, opacity: 0.06, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: effect.edge, transparent: true, opacity: 0.06, side: THREE.DoubleSide })
     )
     slot.rotation.x = -Math.PI / 2
     slot.position.set(-70 + i * 7, 0.14, -50)
@@ -257,7 +259,7 @@ function addParkEnvironment (models, layers, anims) {
 
     const line = new THREE.Mesh(
       new THREE.PlaneGeometry(0.2, 10),
-      new THREE.MeshBasicMaterial({ color: 0x00f5ff, transparent: true, opacity: 0.3, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: effect.edge, transparent: true, opacity: 0.3, side: THREE.DoubleSide })
     )
     line.rotation.x = -Math.PI / 2
     line.position.set(-73.5 + i * 7, 0.16, -50)
@@ -268,12 +270,12 @@ function addParkEnvironment (models, layers, anims) {
   const gate = new THREE.Mesh(
     new THREE.BoxGeometry(16, 5, 1),
     new THREE.MeshStandardMaterial({
-      color: 0x1a3a4a, transparent: true, opacity: 0.6,
-      emissive: 0x00384c, emissiveIntensity: 0.15
+      color: material.wall, transparent: true, opacity: 0.6,
+      emissive: material.wallEmissive, emissiveIntensity: 0.15
     })
   )
   gate.position.set(0, 2.5, -56)
-  models.addEdges(gate, 0x00eaff, 0.45)
+  models.addEdges(gate, effect.edge, 0.45)
   layers.addTo('base', gate)
 
   const gateLabel = models.createLabel('智慧物业园区')
@@ -283,29 +285,31 @@ function addParkEnvironment (models, layers, anims) {
 
 /* ========== 建筑 ========== */
 
-function createBuilding (b, models, layers, anims, interactions) {
+function createBuilding (b, models, layers, anims, interactions, theme) {
   const g = new THREE.Group()
   const [px, py, pz] = b.position
   g.position.set(px, py, pz)
   const [w, h, d] = b.size
   const alarm = b.alarm
+  const { material, effect } = theme.three
+  const { danger } = theme.semantic
 
   // 主体
   const bodyMat = new THREE.MeshStandardMaterial({
-    color: alarm ? 0x351719 : 0x0c4d67,
+    color: alarm ? material.buildingAlarm : material.building,
     transparent: true, opacity: 0.8,
     roughness: 0.36, metalness: 0.28,
-    emissive: alarm ? 0x401010 : 0x00384c,
+    emissive: alarm ? danger : material.buildingEmissive,
     emissiveIntensity: alarm ? 0.55 : 0.35
   })
   const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat)
   body.position.y = h / 2
-  models.addEdges(body, alarm ? 0xff554f : 0x00eaff, 0.62)
+  models.addEdges(body, alarm ? danger : effect.edge, 0.62)
   g.add(body)
 
   // 楼层分割线
   const floors = Math.max(2, Math.floor(h / 6))
-  const lineColor = alarm ? 0xff8877 : 0x00eaff
+  const lineColor = alarm ? danger : effect.edge
   for (let i = 1; i < floors; i++) {
     const y = (h / floors) * i
     ;[d / 2 + 0.06, -d / 2 - 0.06].forEach(z => {
@@ -328,7 +332,7 @@ function createBuilding (b, models, layers, anims, interactions) {
   }
 
   // 窗户 — 呼吸光效
-  const winColor = alarm ? 0xff554f : 0x1a5a7a
+  const winColor = alarm ? danger : material.buildingEmissive
   const winRows = floors
   const winCols = Math.max(2, Math.floor(w / 8))
   const windowsList = [] // 收集窗户引用用于动画
@@ -340,7 +344,7 @@ function createBuilding (b, models, layers, anims, interactions) {
         new THREE.PlaneGeometry(w / winCols * 0.6, h / floors * 0.45),
         new THREE.MeshStandardMaterial({
           color: winColor,
-          emissive: alarm ? 0xff554f : 0x00eaff,
+          emissive: alarm ? danger : effect.edge,
           emissiveIntensity: 0.1,
           transparent: true,
           opacity: 0.18,
@@ -364,15 +368,15 @@ function createBuilding (b, models, layers, anims, interactions) {
 
   // 角柱
   const pillarMat = new THREE.MeshStandardMaterial({
-    color: alarm ? 0x4a2020 : 0x1a4a5a,
+    color: alarm ? material.buildingAlarm : material.wall,
     roughness: 0.3, metalness: 0.5,
-    emissive: alarm ? 0x401010 : 0x00384c,
+    emissive: alarm ? danger : material.wallEmissive,
     emissiveIntensity: 0.2
   })
   ;[[-w / 2, -d / 2], [-w / 2, d / 2], [w / 2, -d / 2], [w / 2, d / 2]].forEach(([cx, cz]) => {
     const p = new THREE.Mesh(new THREE.BoxGeometry(1.3, h + 1.5, 1.3), pillarMat)
     p.position.set(cx, (h + 1.5) / 2, cz)
-    models.addEdges(p, alarm ? 0xff554f : 0x00eaff, 0.22)
+    models.addEdges(p, alarm ? danger : effect.edge, 0.22)
     g.add(p)
   })
 
@@ -380,19 +384,19 @@ function createBuilding (b, models, layers, anims, interactions) {
   const roof = new THREE.Mesh(
     new THREE.BoxGeometry(w * 0.4, 2.5, d * 0.35),
     new THREE.MeshStandardMaterial({
-      color: 0x2a4a5a, roughness: 0.5, metalness: 0.3,
-      emissive: 0x002838, emissiveIntensity: 0.1
+      color: material.furniture, roughness: 0.5, metalness: 0.3,
+      emissive: material.wallEmissive, emissiveIntensity: 0.1
     })
   )
   roof.position.set(0, h + 1.25, 0)
-  models.addEdges(roof, alarm ? 0xff554f : 0x00eaff, 0.25)
+  models.addEdges(roof, alarm ? danger : effect.edge, 0.25)
   g.add(roof)
 
   // 告警信标
   if (alarm) {
     const beacon = new THREE.Mesh(
       new THREE.SphereGeometry(1.2, 16, 8),
-      new THREE.MeshBasicMaterial({ color: 0xff554f, transparent: true, opacity: 0.85 })
+      new THREE.MeshBasicMaterial({ color: danger, transparent: true, opacity: 0.85 })
     )
     beacon.position.set(0, h + 3.5, 0)
     g.add(beacon)
@@ -406,18 +410,18 @@ function createBuilding (b, models, layers, anims, interactions) {
   const canopy = new THREE.Mesh(
     new THREE.BoxGeometry(w * 0.5, 0.4, 4),
     new THREE.MeshStandardMaterial({
-      color: 0x1a3a4a, transparent: true, opacity: 0.7,
-      emissive: alarm ? 0x401010 : 0x00384c, emissiveIntensity: 0.2
+      color: material.wall, transparent: true, opacity: 0.7,
+      emissive: alarm ? danger : material.wallEmissive, emissiveIntensity: 0.2
     })
   )
   canopy.position.set(0, 4.5, d / 2 + 2)
-  models.addEdges(canopy, alarm ? 0xff8877 : 0x00eaff, 0.4)
+  models.addEdges(canopy, alarm ? danger : effect.edge, 0.4)
   g.add(canopy)
 
   ;[-w * 0.2, w * 0.2].forEach(sx => {
     const sup = new THREE.Mesh(
       new THREE.CylinderGeometry(0.25, 0.25, 4.5, 8),
-      new THREE.MeshStandardMaterial({ color: 0x2a4a5a, metalness: 0.5 })
+      new THREE.MeshStandardMaterial({ color: material.furniture, metalness: 0.5 })
     )
     sup.position.set(sx, 2.25, d / 2 + 3.5)
     g.add(sup)
@@ -427,7 +431,7 @@ function createBuilding (b, models, layers, anims, interactions) {
   const base = new THREE.Mesh(
     new THREE.BoxGeometry(w + 2, 0.6, d + 2),
     new THREE.MeshBasicMaterial({
-      color: alarm ? 0xff554f : 0x00f5ff,
+      color: alarm ? danger : effect.primary,
       transparent: true, opacity: 0.2
     })
   )
@@ -442,7 +446,7 @@ function createBuilding (b, models, layers, anims, interactions) {
   // 顶部光柱
   const beamGeo = new THREE.CylinderGeometry(0.6, 0.6, 35, 8)
   const beamMat = new THREE.MeshBasicMaterial({
-    color: alarm ? 0xff554f : 0xeeffff,
+    color: alarm ? danger : material.ceilingLight,
     transparent: true,
     opacity: alarm ? 0.06 : 0.04,
     depthWrite: false
@@ -458,7 +462,7 @@ function createBuilding (b, models, layers, anims, interactions) {
   })
 
   // 地面光圈
-  const ring = models.createRing(alarm ? 12 : 9, alarm ? 0xff554f : 0x00f5ff)
+  const ring = models.createRing(alarm ? 12 : 9, alarm ? danger : effect.primary)
   ring.group.position.set(px, 0.15, pz)
   layers.addTo('effect', ring.group)
   anims.register(ring.animKey, t => ring.update(t))
@@ -478,11 +482,11 @@ function createBuilding (b, models, layers, anims, interactions) {
 
 /* ========== 设备点位 ========== */
 
-function createDevice (d, models, layers, anims, interactions) {
+function createDevice (d, models, layers, anims, interactions, theme) {
   const g = new THREE.Group()
   const [dx, dy, dz] = d.position
   g.position.set(dx, dy, dz)
-  const c = d.alarm ? 0xff554f : 0x00f5ff
+  const c = d.alarm ? theme.semantic.danger : theme.three.effect.primary
 
   const ball = new THREE.Mesh(
     new THREE.SphereGeometry(2, 32, 16),

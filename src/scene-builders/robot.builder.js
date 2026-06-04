@@ -23,24 +23,24 @@ import * as THREE from 'three'
  * 构建机器人场景
  *
  * @param {Object} cfg      场景配置（rooms, waypoints 等）
- * @param {Object} managers { models, layers, anims, interactions }
+ * @param {Object} managers { models, layers, anims, interactions, theme }
  * @param {Object} options  运行选项（robotSpeed, dwellScale）
  * @returns {Object}        { robot, motion, waypoints, trailBuf, trailGeo }
  */
 export default function buildRobotScene (cfg, managers, options = {}) {
-  const { models, layers, anims, interactions } = managers
+  const { models, layers, anims, interactions, theme } = managers
 
   // ── 1. 地面 ──
   layers.addTo('base', models.createGrid(178, 182, 116))
 
   // ── 2. 功能区 ──
-  cfg.rooms.forEach(r => createRobotRoom(r, models, layers, anims, interactions))
+  cfg.rooms.forEach(r => createRobotRoom(r, models, layers, anims, interactions, theme))
 
   // ── 3. 建筑结构（柱子、灯带、箭头） ──
-  addRobotEnvironment(models, layers, anims)
+  addRobotEnvironment(models, layers, anims, theme)
 
   // ── 4. 规划路径 ──
-  const { waypoints, trailBuf, trailGeo } = createRobotPath(cfg.waypoints, models, layers, anims)
+  const { waypoints, trailBuf, trailGeo } = createRobotPath(cfg.waypoints, models, layers, anims, theme)
 
   // 热力图覆盖网格
   const cellSize = 6
@@ -63,14 +63,14 @@ export default function buildRobotScene (cfg, managers, options = {}) {
   })
 
   // ── 5. 机器人模型 ──
-  const { robot, motion } = createRobot(waypoints, options, models, layers, anims, interactions)
+  const { robot, motion } = createRobot(waypoints, options, models, layers, anims, interactions, theme)
 
   return { robot, motion, waypoints, trailBuf, trailGeo, heatGrid }
 }
 
 /* ========== 功能区 ========== */
 
-function createRobotRoom (r, models, layers, anims, interactions) {
+function createRobotRoom (r, models, layers, anims, interactions, theme) {
   const g = new THREE.Group()
   const [rx, rz] = r.position
   const [w, d] = r.size
@@ -90,7 +90,11 @@ function createRobotRoom (r, models, layers, anims, interactions) {
   g.add(floor)
 
   // 状态发光层
-  const glowColor = r.status === '已完成' ? 0x26f2a3 : active ? 0x00f5ff : 0xffb642
+  const glowColor = r.status === '已完成'
+    ? theme.semantic.success
+    : active
+      ? theme.three.effect.primary
+      : theme.semantic.warning
   const glow = new THREE.Mesh(
     new THREE.PlaneGeometry(w * 0.92, d * 0.92),
     new THREE.MeshBasicMaterial({
@@ -137,7 +141,8 @@ function createRobotRoom (r, models, layers, anims, interactions) {
 
 /* ========== 建筑结构 ========== */
 
-function addRobotEnvironment (models, layers, anims) {
+function addRobotEnvironment (models, layers, anims, theme) {
+  const { material, effect } = theme.three
   // 承重柱
   const cols = [
     [-24, -16], [-24, 4], [20, -16], [20, 4],
@@ -147,17 +152,17 @@ function addRobotEnvironment (models, layers, anims) {
     const col = new THREE.Mesh(
       new THREE.BoxGeometry(2.4, 9, 2.4),
       new THREE.MeshStandardMaterial({
-        color: 0x3a5a6a, roughness: 0.3, metalness: 0.5,
-        emissive: 0x00384c, emissiveIntensity: 0.12
+        color: material.wall, roughness: 0.3, metalness: 0.5,
+        emissive: material.wallEmissive, emissiveIntensity: 0.12
       })
     )
     col.position.set(x, 4.5, z)
-    models.addEdges(col, 0x00eaff, 0.28)
+    models.addEdges(col, effect.edge, 0.28)
     layers.addTo('base', col)
 
     const baseLight = new THREE.Mesh(
       new THREE.RingGeometry(1.6, 2.2, 32),
-      new THREE.MeshBasicMaterial({ color: 0x00f5ff, transparent: true, opacity: 0.15, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: effect.primary, transparent: true, opacity: 0.15, side: THREE.DoubleSide })
     )
     baseLight.rotation.x = -Math.PI / 2
     baseLight.position.set(x, 0.55, z)
@@ -172,7 +177,7 @@ function addRobotEnvironment (models, layers, anims) {
     .forEach(([x, z, len, wid]) => {
       const lp = new THREE.Mesh(
         new THREE.PlaneGeometry(len, wid),
-        new THREE.MeshBasicMaterial({ color: 0xeeffff, transparent: true, opacity: 0.1, side: THREE.DoubleSide })
+        new THREE.MeshBasicMaterial({ color: material.ceilingLight, transparent: true, opacity: 0.1, side: THREE.DoubleSide })
       )
       lp.rotation.x = Math.PI / 2
       lp.position.set(x, 9.5, z)
@@ -183,7 +188,7 @@ function addRobotEnvironment (models, layers, anims) {
   for (let i = 0; i < 4; i++) {
     const arrow = new THREE.Mesh(
       new THREE.ConeGeometry(0.8, 2.4, 3),
-      new THREE.MeshBasicMaterial({ color: 0x00f5ff, transparent: true, opacity: 0.2 })
+      new THREE.MeshBasicMaterial({ color: effect.primary, transparent: true, opacity: 0.2 })
     )
     arrow.rotation.x = Math.PI / 2
     arrow.rotation.z = Math.PI / 2
@@ -194,7 +199,8 @@ function addRobotEnvironment (models, layers, anims) {
 
 /* ========== 规划路径 ========== */
 
-function createRobotPath (wps, models, layers, anims) {
+function createRobotPath (wps, models, layers, anims, theme) {
+  const { route, routeDot } = theme.three.effect
   const waypoints = wps.map(p => ({
     ...p,
     vector: new THREE.Vector3(...p.position)
@@ -215,7 +221,7 @@ function createRobotPath (wps, models, layers, anims) {
   const pathGeo = new THREE.BufferGeometry().setFromPoints(pathPts)
   const pathLine = new THREE.Line(pathGeo,
     new THREE.LineDashedMaterial({
-      color: 0x00f5ff, transparent: true, opacity: 0.25,
+      color: route, transparent: true, opacity: 0.25,
       dashSize: 2, gapSize: 1.5
     })
   )
@@ -225,21 +231,21 @@ function createRobotPath (wps, models, layers, anims) {
   // 发光路径（实线）
   layers.addTo('route', new THREE.Line(
     new THREE.BufferGeometry().setFromPoints(pathPts),
-    new THREE.LineBasicMaterial({ color: 0x00f5ff, transparent: true, opacity: 0.55 })
+    new THREE.LineBasicMaterial({ color: route, transparent: true, opacity: 0.55 })
   ))
 
   // 清洁拖尾轨迹
   const trailBuf = []
   const trailGeo = new THREE.BufferGeometry()
   layers.addTo('route', new THREE.Line(trailGeo,
-    new THREE.LineBasicMaterial({ color: 0x00f5ff, transparent: true, opacity: 0.9 })
+    new THREE.LineBasicMaterial({ color: route, transparent: true, opacity: 0.9 })
   ))
 
   // 流动粒子
   for (let i = 0; i < 16; i++) {
     const dot = new THREE.Mesh(
       new THREE.SphereGeometry(0.55, 12, 8),
-      new THREE.MeshBasicMaterial({ color: 0x8fffff, transparent: true, opacity: 0.75 })
+      new THREE.MeshBasicMaterial({ color: routeDot, transparent: true, opacity: 0.75 })
     )
     layers.addTo('route', dot)
     anims.register(`dot_${i}`, ((idx) => t => {
@@ -260,15 +266,17 @@ function createRobotPath (wps, models, layers, anims) {
 
 /* ========== 机器人模型 ========== */
 
-function createRobot (waypoints, options, models, layers, anims, interactions) {
+function createRobot (waypoints, options, models, layers, anims, interactions, theme) {
+  const { material, effect } = theme.three
+  const { success, warning, danger } = theme.semantic
   const robot = new THREE.Group()
 
   // 底盘
   const body = new THREE.Mesh(
     new THREE.CylinderGeometry(4.2, 5, 2.4, 48),
     new THREE.MeshStandardMaterial({
-      color: 0xe8f0f0, roughness: 0.32, metalness: 0.25,
-      emissive: 0x1a3a4a, emissiveIntensity: 0.15
+      color: material.robotBody, roughness: 0.32, metalness: 0.25,
+      emissive: material.wall, emissiveIntensity: 0.15
     })
   )
   body.position.y = 2.2
@@ -276,7 +284,7 @@ function createRobot (waypoints, options, models, layers, anims, interactions) {
   // 保险杠
   const bumper = new THREE.Mesh(
     new THREE.TorusGeometry(5, 0.4, 8, 48),
-    new THREE.MeshStandardMaterial({ color: 0x2a4a5a, roughness: 0.4, metalness: 0.5 })
+    new THREE.MeshStandardMaterial({ color: material.furniture, roughness: 0.4, metalness: 0.5 })
   )
   bumper.rotation.x = Math.PI / 2
   bumper.position.y = 1.4
@@ -285,8 +293,8 @@ function createRobot (waypoints, options, models, layers, anims, interactions) {
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(2.2, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2),
     new THREE.MeshStandardMaterial({
-      color: 0x0a1a2a, roughness: 0.2, metalness: 0.6,
-      emissive: 0x00eaff, emissiveIntensity: 0.25
+      color: material.robotDark, roughness: 0.2, metalness: 0.6,
+      emissive: effect.edge, emissiveIntensity: 0.25
     })
   )
   dome.position.y = 3.5
@@ -294,28 +302,28 @@ function createRobot (waypoints, options, models, layers, anims, interactions) {
   // LiDAR 扫描仪
   const lidar = new THREE.Mesh(
     new THREE.CylinderGeometry(1.4, 1.4, 0.55, 24),
-    new THREE.MeshStandardMaterial({ color: 0x1a2a3a, emissive: 0x00ccff, emissiveIntensity: 0.6 })
+    new THREE.MeshStandardMaterial({ color: material.robotDark, emissive: effect.primary, emissiveIntensity: 0.6 })
   )
   lidar.position.y = 5
 
   // 前方传感器条
   const front = new THREE.Mesh(
     new THREE.BoxGeometry(3.2, 0.45, 0.8),
-    new THREE.MeshBasicMaterial({ color: 0x00f5ff })
+    new THREE.MeshBasicMaterial({ color: effect.primary })
   )
   front.position.set(0, 2.2, 5)
 
   // 状态 LED
   const led = new THREE.Mesh(
     new THREE.SphereGeometry(0.45, 16, 8),
-    new THREE.MeshBasicMaterial({ color: 0x00ff88 })
+    new THREE.MeshBasicMaterial({ color: success })
   )
   led.position.set(0, 5.5, 1.5)
 
   // 车轮
   const wheels = []
   const wheelGeo = new THREE.CylinderGeometry(0.7, 0.7, 1.1, 16)
-  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 })
+  const wheelMat = new THREE.MeshStandardMaterial({ color: material.wheel, roughness: 0.8 })
   ;[[-3.8, -2.6], [-3.8, 2.6], [3.8, -2.6], [3.8, 2.6]].forEach(([x, z]) => {
     const w = new THREE.Mesh(wheelGeo, wheelMat)
     w.rotation.z = Math.PI / 2
@@ -327,14 +335,14 @@ function createRobot (waypoints, options, models, layers, anims, interactions) {
   // 边刷
   const brush = new THREE.Mesh(
     new THREE.CylinderGeometry(2.8, 2.8, 0.2, 5),
-    new THREE.MeshBasicMaterial({ color: 0x556666, transparent: true, opacity: 0.45 })
+    new THREE.MeshBasicMaterial({ color: material.furniture, transparent: true, opacity: 0.45 })
   )
   brush.position.set(3.6, 0.3, 3.6)
 
   // 底部光环
   const groundGlow = new THREE.Mesh(
     new THREE.CircleGeometry(6, 32),
-    new THREE.MeshBasicMaterial({ color: 0x00f5ff, transparent: true, opacity: 0.12, side: THREE.DoubleSide })
+    new THREE.MeshBasicMaterial({ color: effect.primary, transparent: true, opacity: 0.12, side: THREE.DoubleSide })
   )
   groundGlow.rotation.x = -Math.PI / 2
   groundGlow.position.y = 0.08
@@ -342,7 +350,7 @@ function createRobot (waypoints, options, models, layers, anims, interactions) {
   // 状态光环 — 颜色随电量变化
   const statusRingGeo = new THREE.RingGeometry(5.5, 6.5, 64)
   const statusRingMat = new THREE.MeshBasicMaterial({
-    color: 0x26f2a3,
+    color: success,
     transparent: true,
     opacity: 0.35,
     side: THREE.DoubleSide,
@@ -355,7 +363,7 @@ function createRobot (waypoints, options, models, layers, anims, interactions) {
   // 检测光环
   const halo = new THREE.Mesh(
     new THREE.SphereGeometry(7, 32, 14),
-    new THREE.MeshBasicMaterial({ color: 0x00f5ff, transparent: true, opacity: 0.08, wireframe: true })
+    new THREE.MeshBasicMaterial({ color: effect.primary, transparent: true, opacity: 0.08, wireframe: true })
   )
   halo.position.y = 2.6
 
@@ -387,9 +395,9 @@ function createRobot (waypoints, options, models, layers, anims, interactions) {
   anims.register('statusRing', (t) => {
     const battery = robot.userData.battery || 76
     let color
-    if (battery > 50) color = new THREE.Color(0x26f2a3)
-    else if (battery > 30) color = new THREE.Color(0xffb642)
-    else color = new THREE.Color(0xff554f)
+    if (battery > 50) color = new THREE.Color(success)
+    else if (battery > 30) color = new THREE.Color(warning)
+    else color = new THREE.Color(danger)
     statusRingMat.color.copy(color)
     statusRingMat.opacity = 0.25 + Math.sin(t * 4) * 0.1
     statusRing.scale.setScalar(1 + Math.sin(t * 3) * 0.03)

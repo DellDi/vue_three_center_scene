@@ -20,33 +20,34 @@ import * as THREE from 'three'
  * 构建楼层场景
  *
  * @param {Object} cfg      场景配置（rooms, devices 等）
- * @param {Object} managers { models, layers, anims, interactions }
+ * @param {Object} managers { models, layers, anims, interactions, theme }
  * @returns {Object}        { robot: null }
  */
 export default function buildFloorScene (cfg, managers) {
-  const { models, layers, anims, interactions } = managers
+  const { models, layers, anims, interactions, theme } = managers
 
   // ── 1. 地面网格 ──
   layers.addTo('base', models.createGrid(145, 150, 96))
 
   // ── 2. 外围墙体 ──
-  addPerimeterWalls(models, layers)
+  addPerimeterWalls(models, layers, theme)
 
   // ── 3. 天花板灯带 ──
-  addCeilingLights(layers)
+  addCeilingLights(layers, theme)
 
   // ── 4. 功能区 ──
-  cfg.rooms.forEach(r => createRoom(r, cfg.title, models, layers, anims, interactions))
+  cfg.rooms.forEach(r => createRoom(r, cfg.title, models, layers, anims, interactions, theme))
 
   // ── 5. 设备点位 ──
-  cfg.devices.forEach(d => createDevice(d, models, layers, anims, interactions))
+  cfg.devices.forEach(d => createDevice(d, models, layers, anims, interactions, theme))
 
   return { robot: null }
 }
 
 /* ========== 外围墙体 ========== */
 
-function addPerimeterWalls (models, layers) {
+function addPerimeterWalls (models, layers, theme) {
+  const { material, effect } = theme.three
   const perim = [
     [-74, 0, 1.4, 96, 8], [74, 0, 1.4, 96, 8],
     [0, -48, 150, 1.4, 8], [0, 48, 150, 1.4, 8]
@@ -55,25 +56,25 @@ function addPerimeterWalls (models, layers) {
     const m = new THREE.Mesh(
       new THREE.BoxGeometry(w, h, d),
       new THREE.MeshStandardMaterial({
-        color: 0x1a3a4a, transparent: true, opacity: 0.55,
+        color: material.wall, transparent: true, opacity: 0.55,
         roughness: 0.35, metalness: 0.4,
-        emissive: 0x002b34, emissiveIntensity: 0.08
+        emissive: material.wallEmissive, emissiveIntensity: 0.08
       })
     )
     m.position.set(x, h / 2, z)
-    models.addEdges(m, 0x00eaff, 0.42)
+    models.addEdges(m, effect.edge, 0.42)
     layers.addTo('base', m)
   })
 }
 
 /* ========== 天花板灯带 ========== */
 
-function addCeilingLights (layers) {
+function addCeilingLights (layers, theme) {
   const ceilLights = [[0, -20, 80, 2], [0, 20, 80, 2], [-40, 0, 2, 60], [30, 0, 2, 60]]
   ceilLights.forEach(([x, z, w, d]) => {
     const lp = new THREE.Mesh(
       new THREE.PlaneGeometry(w, d),
-      new THREE.MeshBasicMaterial({ color: 0xeeffff, transparent: true, opacity: 0.08, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: theme.three.material.ceilingLight, transparent: true, opacity: 0.08, side: THREE.DoubleSide })
     )
     lp.rotation.x = Math.PI / 2
     lp.position.set(x, 9.5, z)
@@ -83,7 +84,7 @@ function addCeilingLights (layers) {
 
 /* ========== 功能区 ========== */
 
-function createRoom (r, sceneTitle, models, layers, anims, interactions) {
+function createRoom (r, sceneTitle, models, layers, anims, interactions, theme) {
   const g = new THREE.Group()
   const [rx, rz] = r.position
   const [w, d] = r.size
@@ -103,7 +104,7 @@ function createRoom (r, sceneTitle, models, layers, anims, interactions) {
   g.add(floor)
 
   // 状态发光层
-  const glowColor = alarm ? 0xff554f : r.color
+  const glowColor = alarm ? theme.semantic.danger : r.color
   const glow = new THREE.Mesh(
     new THREE.PlaneGeometry(w * 0.92, d * 0.92),
     new THREE.MeshBasicMaterial({
@@ -155,11 +156,11 @@ function createRoom (r, sceneTitle, models, layers, anims, interactions) {
 
 /* ========== 设备点位 ========== */
 
-function createDevice (d, models, layers, anims, interactions) {
+function createDevice (d, models, layers, anims, interactions, theme) {
   const g = new THREE.Group()
   const [dx, dy, dz] = d.position
   g.position.set(dx, dy, dz)
-  const c = d.alarm ? 0xff554f : 0x00f5ff
+  const c = d.alarm ? theme.semantic.danger : theme.three.effect.primary
 
   const ball = new THREE.Mesh(
     new THREE.SphereGeometry(2, 32, 16),
