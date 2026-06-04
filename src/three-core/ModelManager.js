@@ -128,7 +128,7 @@ export default class ModelManager {
     el.textContent = text
     const css = this.theme.css
     el.style.cssText = [
-      `color:${alarm ? css.danger : css.text}`,
+      `color:${alarm ? css.dangerText || css.danger : css.text}`,
       'font-size:12px',
       'white-space:nowrap',
       'letter-spacing:1px',

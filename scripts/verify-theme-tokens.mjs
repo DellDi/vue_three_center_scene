@@ -14,7 +14,7 @@ const mod = await import(pathToFileURL(tempPath))
 ;[mod.darkTechTheme, mod.blueWhiteTheme].forEach(theme => mod.assertThemeComplete(theme))
 
 const vars = mod.applyThemeVars(mod.blueWhiteTheme)
-const requiredCssVars = ['--scene-panel-bg', '--scene-primary', '--scene-text', '--scene-progress']
+const requiredCssVars = ['--scene-panel-bg', '--scene-primary', '--scene-text', '--scene-danger-text', '--scene-progress']
 const missingVars = requiredCssVars.filter(key => !vars[key])
 if (missingVars.length) throw new Error(`Missing CSS vars: ${missingVars.join(', ')}`)
 

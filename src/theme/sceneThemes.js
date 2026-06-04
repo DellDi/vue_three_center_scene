@@ -4,6 +4,7 @@ const requiredPaths = [
   'css.panelBorder',
   'css.primary',
   'css.text',
+  'css.dangerText',
   'three.clear',
   'three.fog',
   'three.lights.ambient',
@@ -36,6 +37,7 @@ export const darkTechTheme = {
     muted: 'rgba(210,250,255,.65)',
     weak: 'rgba(220,255,255,.48)',
     danger: '#ff6c66',
+    dangerText: '#ff8f88',
     dangerBg: 'rgba(82,18,22,.72)',
     success: '#26f2a3',
     progress: 'linear-gradient(90deg, #00c8c6, #70ffff)'
@@ -95,6 +97,7 @@ export const blueWhiteTheme = {
     muted: '#60708a',
     weak: 'rgba(68,93,124,.58)',
     danger: '#ff4d43',
+    dangerText: '#b42318',
     dangerBg: 'rgba(255,77,67,.10)',
     success: '#18a869',
     progress: 'linear-gradient(90deg, #126bff, #67b7ff)'
@@ -162,6 +165,7 @@ export function applyThemeVars (theme) {
     '--scene-muted': theme.css.muted,
     '--scene-weak': theme.css.weak,
     '--scene-danger': theme.css.danger,
+    '--scene-danger-text': theme.css.dangerText,
     '--scene-danger-bg': theme.css.dangerBg,
     '--scene-success': theme.css.success,
     '--scene-progress': theme.css.progress
