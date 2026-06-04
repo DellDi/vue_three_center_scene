@@ -6,6 +6,9 @@
  */
 import * as THREE from 'three'
 
+const DEFAULT_PARTICLE_STYLE = 'rgb(0, 245, 255)'
+const DEFAULT_PARTICLE_COLOR = new THREE.Color(DEFAULT_PARTICLE_STYLE).getHex()
+
 export default class ParticleSystem {
   /**
    * @param {THREE.Scene} scene  主场景
@@ -15,6 +18,7 @@ export default class ParticleSystem {
     this.scene = scene
     this.count = opts.count || 250
     this.bounds = opts.bounds || { x: 110, y: [12, 55], z: 60 }
+    this.theme = opts.theme
     this.points = null
     this._phaseData = null
   }
@@ -45,10 +49,11 @@ export default class ParticleSystem {
     canvas.height = 32
     const ctx = canvas.getContext('2d')
     const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16)
-    gradient.addColorStop(0, 'rgba(0, 245, 255, 1)')
-    gradient.addColorStop(0.25, 'rgba(0, 245, 255, 0.6)')
-    gradient.addColorStop(0.6, 'rgba(0, 245, 255, 0.08)')
-    gradient.addColorStop(1, 'rgba(0, 245, 255, 0)')
+    const particleCssColor = this.theme?.css?.primary || DEFAULT_PARTICLE_STYLE
+    gradient.addColorStop(0, this._toRgba(particleCssColor, 1))
+    gradient.addColorStop(0.25, this._toRgba(particleCssColor, 0.6))
+    gradient.addColorStop(0.6, this._toRgba(particleCssColor, 0.08))
+    gradient.addColorStop(1, this._toRgba(particleCssColor, 0))
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, 32, 32)
     const texture = new THREE.CanvasTexture(canvas)
@@ -60,7 +65,7 @@ export default class ParticleSystem {
       depthWrite: false,
       transparent: true,
       opacity: 0.6,
-      color: 0x00f5ff
+      color: this.theme?.three?.effect?.primary || DEFAULT_PARTICLE_COLOR
     })
 
     this.points = new THREE.Points(geometry, material)
@@ -88,6 +93,18 @@ export default class ParticleSystem {
   /** 显隐粒子（传送门转场时隐藏） */
   setVisible (v) {
     if (this.points) this.points.visible = v
+  }
+
+  _toRgba (color, alpha) {
+    try {
+      const c = new THREE.Color(color)
+      const r = Math.round(c.r * 255)
+      const g = Math.round(c.g * 255)
+      const b = Math.round(c.b * 255)
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`
+    } catch (e) {
+      return `rgba(0, 245, 255, ${alpha})`
+    }
   }
 
   /** 释放 GPU 资源 */

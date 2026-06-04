@@ -32,10 +32,12 @@ export default class EffectManager {
   /**
    * @param {LayerManager}     layerManager  图层管理（特效添加到 alarm 层）
    * @param {AnimationManager} animManager   动画管理（注册脉冲动画）
+   * @param {Object}           theme         场景主题
    */
-  constructor (layerManager, animManager) {
+  constructor (layerManager, animManager, theme) {
     this.layers = layerManager
     this.anims = animManager
+    this.theme = theme
 
     /**
      * 活跃告警追踪：targetId → { sphere, animKey }
@@ -75,7 +77,7 @@ export default class EffectManager {
     const sphere = new THREE.Mesh(
       new THREE.SphereGeometry(11, 32, 16),
       new THREE.MeshBasicMaterial({
-        color: 0xff554f,
+        color: this.theme?.semantic?.danger || 0xff4d43,
         transparent: true,
         opacity: 0.24,
         wireframe: true

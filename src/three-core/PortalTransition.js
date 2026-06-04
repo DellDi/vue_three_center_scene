@@ -6,12 +6,20 @@
  *
  * 使用 Canvas 2D overlay，不操作 Three.js 场景，避免 GPU 状态污染。
  */
+const DEFAULT_PORTAL_BG_RGB = '2, 8, 17'
+const DEFAULT_PORTAL_PARTICLE = 'rgb(0, 245, 255)'
+
 export default class PortalTransition {
   /**
    * @param {HTMLElement} container  场景容器元素（用于插入 overlay canvas）
+   * @param {Object}      theme      场景主题
    */
-  constructor (container) {
+  constructor (container, theme) {
     this.container = container
+    this.theme = theme
+    this.portalBg = theme?.three?.effect?.portalBg || `rgb(${DEFAULT_PORTAL_BG_RGB})`
+    this.portalBgRgb = theme?.three?.effect?.portalBgRgb || DEFAULT_PORTAL_BG_RGB
+    this.portalParticle = theme?.three?.effect?.portalParticle || DEFAULT_PORTAL_PARTICLE
     this.canvas = null
     this.ctx = null
     this.particles = []
@@ -53,7 +61,7 @@ export default class PortalTransition {
     // ── Phase 2: 坍缩 — 所有粒子缩到中心（0.5s）──
     await this._animate(0.5, (progress) => {
       this._clear()
-      this.ctx.fillStyle = `rgba(2, 8, 17, ${progress})`
+      this.ctx.fillStyle = `rgba(${this.portalBgRgb}, ${progress})`
       this.ctx.fillRect(0, 0, W, H)
       this.particles.forEach(p => {
         p.x = cx + (p.x - cx) * (1 - progress)
@@ -66,7 +74,7 @@ export default class PortalTransition {
 
     // ── 切换场景 ──
     this._clear()
-    this.ctx.fillStyle = '#020811'
+    this.ctx.fillStyle = this.portalBg
     this.ctx.fillRect(0, 0, W, H)
     await switchFn()
 
@@ -74,7 +82,7 @@ export default class PortalTransition {
     this._spawnCenterParticles(100, cx, cy)
     await this._animate(1.2, (progress) => {
       this._clear()
-      this.ctx.fillStyle = `rgba(2, 8, 17, ${1 - progress})`
+      this.ctx.fillStyle = `rgba(${this.portalBgRgb}, ${1 - progress})`
       this.ctx.fillRect(0, 0, W, H)
       this.particles.forEach(p => {
         const angle = p.startAngle + progress * Math.PI * 3
@@ -152,8 +160,8 @@ export default class PortalTransition {
     const ctx = this.ctx
     ctx.save()
     ctx.globalAlpha = p.opacity
-    ctx.fillStyle = '#00f5ff'
-    ctx.shadowColor = '#00f5ff'
+    ctx.fillStyle = this.portalParticle
+    ctx.shadowColor = this.portalParticle
     ctx.shadowBlur = p.size * 2
     ctx.beginPath()
     ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)

@@ -159,11 +159,12 @@ export default class SceneRuntime {
     // ── 粒子系统（仅园区场景显示）──
     const particles = new ParticleSystem(this.scene, {
       count: 250,
-      bounds: { x: 110, y: [12, 55], z: 60 }
+      bounds: { x: 110, y: [12, 55], z: 60 },
+      theme: this.theme
     })
 
     // ── 传送门转场 ──
-    const portal = new PortalTransition(this.container)
+    const portal = new PortalTransition(this.container, this.theme)
 
     const sceneManager = new SceneManager({ models, layers, anims, interactions, resources, effects, theme: this.theme })
     const commandBus = new CommandBus()
