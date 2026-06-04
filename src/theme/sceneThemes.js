@@ -173,7 +173,10 @@ export function applyThemeVars (theme) {
 }
 
 export function resolveToneColor (theme, tone, fallback = 'primary') {
-  return theme.semantic[tone] || theme.semantic[fallback] || theme.semantic.primary
+  if (theme.semantic[tone] !== undefined) return theme.semantic[tone]
+  if (typeof fallback === 'number') return fallback
+  if (typeof fallback === 'string' && theme.semantic[fallback] !== undefined) return theme.semantic[fallback]
+  return theme.semantic.primary
 }
 
 export function assertThemeComplete (theme) {

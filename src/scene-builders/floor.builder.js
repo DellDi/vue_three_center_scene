@@ -91,7 +91,7 @@ function createRoom (r, sceneTitle, models, layers, anims, interactions, theme) 
   const [w, d] = r.size
   const alarm = r.alarm
   const h = 0.5
-  const roomColor = r.tone ? resolveToneColor(theme, r.tone) : r.color
+  const roomColor = r.tone ? resolveToneColor(theme, r.tone, r.color) : r.color
 
   // 立体地台
   const floorMat = new THREE.MeshStandardMaterial({
