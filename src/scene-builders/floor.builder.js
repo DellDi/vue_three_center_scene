@@ -15,6 +15,7 @@
  *   - 视频监控画面叠加（VideoTexture）
  */
 import * as THREE from 'three'
+import { resolveToneColor } from '../theme/sceneThemes'
 
 /**
  * 构建楼层场景
@@ -90,21 +91,22 @@ function createRoom (r, sceneTitle, models, layers, anims, interactions, theme) 
   const [w, d] = r.size
   const alarm = r.alarm
   const h = 0.5
+  const roomColor = r.tone ? resolveToneColor(theme, r.tone) : r.color
 
   // 立体地台
   const floorMat = new THREE.MeshStandardMaterial({
-    color: r.color, transparent: true,
+    color: roomColor, transparent: true,
     opacity: alarm ? 0.28 : 0.2,
     roughness: 0.32, metalness: 0.38,
-    emissive: r.color, emissiveIntensity: alarm ? 0.12 : 0.05
+    emissive: roomColor, emissiveIntensity: alarm ? 0.12 : 0.05
   })
   const floor = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), floorMat)
   floor.position.set(rx, h / 2, rz)
-  models.addEdges(floor, r.color, alarm ? 0.82 : 0.55)
+  models.addEdges(floor, roomColor, alarm ? 0.82 : 0.55)
   g.add(floor)
 
   // 状态发光层
-  const glowColor = alarm ? theme.semantic.danger : r.color
+  const glowColor = alarm ? theme.semantic.danger : roomColor
   const glow = new THREE.Mesh(
     new THREE.PlaneGeometry(w * 0.92, d * 0.92),
     new THREE.MeshBasicMaterial({
@@ -119,7 +121,7 @@ function createRoom (r, sceneTitle, models, layers, anims, interactions, theme) 
   // 墙体
   if (r.walls) {
     r.walls.forEach(w => {
-      g.add(models.createWallSegment(w, r.color))
+      g.add(models.createWallSegment(w, roomColor))
     })
   }
 

@@ -25,7 +25,7 @@ function makeFloorScene (buildingTitle, sceneId) {
     },
     rooms: [
       {
-        id: 'corridor', title: '公共走廊', position: [18, -2], size: [94, 18], color: 0x00f5ff,
+        id: 'corridor', title: '公共走廊', position: [18, -2], size: [94, 18], color: 0x00f5ff, tone: 'primary',
         walls: [
           wall(-29, -11, 18, -11), wall(26, -11, 65, -11),
           wall(-29, 7, 65, 7),
@@ -39,7 +39,7 @@ function makeFloorScene (buildingTitle, sceneId) {
         ]
       },
       {
-        id: 'lobby', title: '大堂', position: [-48, -22], size: [36, 28], color: 0x0ba7b8,
+        id: 'lobby', title: '大堂', position: [-48, -22], size: [36, 28], color: 0x0ba7b8, tone: 'primary',
         walls: [
           wall(-66, -36, -30, -36),
           wall(-66, -8, -52, -8), wall(-44, -8, -30, -8),
@@ -55,7 +55,7 @@ function makeFloorScene (buildingTitle, sceneId) {
         ]
       },
       {
-        id: 'elevator', title: '电梯厅', position: [-4, -24], size: [28, 26], color: 0x0f5f8d,
+        id: 'elevator', title: '电梯厅', position: [-4, -24], size: [28, 26], color: 0x0f5f8d, tone: 'primary',
         walls: [
           wall(-18, -37, 10, -37),
           wall(-18, -11, -6, -11), wall(2, -11, 10, -11),
@@ -68,7 +68,7 @@ function makeFloorScene (buildingTitle, sceneId) {
         ]
       },
       {
-        id: 'pump', title: '水泵房', position: [48, -26], size: [28, 24], color: 0xff554f, alarm: true,
+        id: 'pump', title: '水泵房', position: [48, -26], size: [28, 24], color: 0xff554f, tone: 'danger', alarm: true,
         walls: [
           wall(34, -38, 62, -38),
           wall(34, -14, 42, -14), wall(50, -14, 62, -14),
@@ -83,7 +83,7 @@ function makeFloorScene (buildingTitle, sceneId) {
         ]
       },
       {
-        id: 'power', title: '配电房', position: [-42, 26], size: [36, 24], color: 0xffb642, alarm: true,
+        id: 'power', title: '配电房', position: [-42, 26], size: [36, 24], color: 0xffb642, tone: 'warning', alarm: true,
         walls: [
           wall(-60, 14, -30, 14), wall(-22, 14, -24, 14),
           wall(-60, 38, -24, 38),
@@ -99,7 +99,7 @@ function makeFloorScene (buildingTitle, sceneId) {
         ]
       },
       {
-        id: 'equip', title: '设备间', position: [8, 26], size: [32, 24], color: 0x00f5ff,
+        id: 'equip', title: '设备间', position: [8, 26], size: [32, 24], color: 0x00f5ff, tone: 'primary',
         walls: [
           wall(-8, 14, 24, 14),
           wall(-8, 38, 24, 38),
@@ -117,7 +117,7 @@ function makeFloorScene (buildingTitle, sceneId) {
         ]
       },
       {
-        id: 'monitor', title: '监控室', position: [50, 24], size: [28, 24], color: 0x2d8cff,
+        id: 'monitor', title: '监控室', position: [50, 24], size: [28, 24], color: 0x2d8cff, tone: 'primary',
         walls: [
           wall(36, 12, 64, 12),
           wall(36, 36, 64, 36),

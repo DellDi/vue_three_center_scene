@@ -18,6 +18,7 @@
  *   - 清洁覆盖率热力图
  */
 import * as THREE from 'three'
+import { resolveToneColor } from '../theme/sceneThemes'
 
 /**
  * 构建机器人场景
@@ -76,25 +77,22 @@ function createRobotRoom (r, models, layers, anims, interactions, theme) {
   const [w, d] = r.size
   const active = r.status === '执行中'
   const h = 0.5
+  const roomColor = r.tone ? resolveToneColor(theme, r.tone) : r.color
 
   // 立体地台
   const floorMat = new THREE.MeshStandardMaterial({
-    color: r.color, transparent: true,
+    color: roomColor, transparent: true,
     opacity: active ? 0.36 : 0.18,
     roughness: 0.32, metalness: 0.38,
-    emissive: r.color, emissiveIntensity: active ? 0.14 : 0.04
+    emissive: roomColor, emissiveIntensity: active ? 0.14 : 0.04
   })
   const floor = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), floorMat)
   floor.position.set(rx, h / 2, rz)
-  models.addEdges(floor, r.color, active ? 0.88 : 0.52)
+  models.addEdges(floor, roomColor, active ? 0.88 : 0.52)
   g.add(floor)
 
   // 状态发光层
-  const glowColor = r.status === '已完成'
-    ? theme.semantic.success
-    : active
-      ? theme.three.effect.primary
-      : theme.semantic.warning
+  const glowColor = roomColor
   const glow = new THREE.Mesh(
     new THREE.PlaneGeometry(w * 0.92, d * 0.92),
     new THREE.MeshBasicMaterial({
@@ -108,7 +106,7 @@ function createRobotRoom (r, models, layers, anims, interactions, theme) {
 
   // 墙体
   if (r.walls) {
-    r.walls.forEach(w => g.add(models.createWallSegment(w, r.color)))
+    r.walls.forEach(w => g.add(models.createWallSegment(w, roomColor)))
   }
 
   // 家具

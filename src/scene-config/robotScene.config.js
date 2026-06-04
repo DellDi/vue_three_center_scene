@@ -27,7 +27,7 @@ export default {
       rooms: [
         {
           id: 'lobby', title: '大堂前厅', position: [-56, -28], size: [42, 28],
-          color: 0x00f5ff, status: '已完成',
+          color: 0x00f5ff, tone: 'success', status: '已完成',
           walls: [
             wall(-77, -42, -35, -42),
             wall(-77, -14, -67, -14),
@@ -44,7 +44,7 @@ export default {
         },
         {
           id: 'elevator', title: '电梯厅', position: [-8, -28], size: [30, 26],
-          color: 0x0f6f9a, status: '已完成',
+          color: 0x0f6f9a, tone: 'success', status: '已完成',
           walls: [
             wall(-23, -41, 7, -41),
             wall(-23, -15, -5, -15),
@@ -59,7 +59,7 @@ export default {
         },
         {
           id: 'corridor', title: '公共走廊', position: [38, -6], size: [82, 20],
-          color: 0x00f5ff, status: '执行中',
+          color: 0x00f5ff, tone: 'primary', status: '执行中',
           walls: [
             wall(-3, -16, 20, -16),
             wall(28, -16, 79, -16),
@@ -79,7 +79,7 @@ export default {
         },
         {
           id: 'garage', title: '地下车库B1', position: [-38, 28], size: [80, 28],
-          color: 0x1e6e9a, status: '待执行',
+          color: 0x1e6e9a, tone: 'warning', status: '待执行',
           walls: [
             wall(-78, 14, 2, 14),
             wall(-78, 42, -54, 42),
@@ -98,7 +98,7 @@ export default {
         },
         {
           id: 'charge', title: '充电区周边', position: [58, 32], size: [48, 24],
-          color: 0xffb642, status: '待执行',
+          color: 0xffb642, tone: 'warning', status: '待执行',
           walls: [
             wall(34, 20, 82, 20),
             wall(34, 44, 56, 44),
