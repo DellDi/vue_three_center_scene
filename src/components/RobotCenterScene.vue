@@ -61,6 +61,7 @@ export default {
     dwellScale: { type: Number, default: 1 },
     autoPlay: { type: Boolean, default: true },
     disabled: { type: Boolean, default: false },
+    themeName: { type: String, default: 'blueWhite' },
   },
   data () {
     return {
@@ -93,6 +94,7 @@ export default {
       container: this.$refs.host,
       config,
       mode: 'robot',
+      themeName: this.themeName,
       options: { robotSpeed: this.robotSpeed, dwellScale: this.dwellScale },
       onEvent: this.handleRuntimeEvent,
     })
@@ -155,9 +157,10 @@ export default {
   width: 100%;
   min-height: 520px;
   overflow: hidden;
-  border: 1px solid rgba(0, 245, 255, 0.46);
-  background: #020811;
-  box-shadow: inset 0 0 30px rgba(0, 245, 255, 0.08);
+  color: var(--scene-text, #17324d);
+  border: 1px solid var(--scene-panel-border, rgba(45, 140, 255, 0.28));
+  background: var(--scene-panel-bg, #f6fbff);
+  box-shadow: var(--scene-panel-shadow, inset 0 0 28px rgba(73, 145, 255, 0.08));
 }
 
 .scene-panel:before {
@@ -165,12 +168,17 @@ export default {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: repeating-linear-gradient(90deg,
+  background:
+    repeating-linear-gradient(
+      90deg,
       transparent 0 38px,
-      rgba(0, 245, 255, 0.035) 39px 40px),
-    repeating-linear-gradient(0deg,
+      var(--scene-panel-mask, rgba(45, 140, 255, 0.055)) 39px 40px
+    ),
+    repeating-linear-gradient(
+      0deg,
       transparent 0 38px,
-      rgba(0, 245, 255, 0.03) 39px 40px);
+      var(--scene-panel-mask, rgba(45, 140, 255, 0.055)) 39px 40px
+    );
   z-index: 2;
 }
 
@@ -190,13 +198,14 @@ export default {
 .head b {
   font-size: 22px;
   letter-spacing: 3px;
-  text-shadow: 0 0 10px #00f5ff;
+  color: var(--scene-text, #17324d);
+  text-shadow: 0 0 10px var(--scene-primary-soft, rgba(18, 107, 255, 0.14));
 }
 
 .head span {
   display: block;
   margin-top: 6px;
-  color: rgba(210, 250, 255, 0.58);
+  color: var(--scene-muted, #60708a);
   font-size: 13px;
 }
 
@@ -208,8 +217,9 @@ export default {
 .badges i {
   font-style: normal;
   padding: 7px 10px;
-  border: 1px solid rgba(0, 245, 255, 0.34);
-  background: rgba(0, 32, 44, 0.68);
+  color: var(--scene-button-text, #17456f);
+  border: 1px solid var(--scene-card-border, rgba(45, 140, 255, 0.22));
+  background: var(--scene-card-bg, rgba(255, 255, 255, 0.86));
 }
 
 .toolbar {
@@ -225,9 +235,9 @@ export default {
 .toolbar button {
   height: 30px;
   padding: 0 12px;
-  color: #dff;
-  border: 1px solid rgba(0, 245, 255, 0.48);
-  background: rgba(0, 35, 50, 0.78);
+  color: var(--scene-button-text, #17456f);
+  border: 1px solid var(--scene-panel-border, rgba(45, 140, 255, 0.28));
+  background: var(--scene-button-bg, rgba(255, 255, 255, 0.78));
   cursor: pointer;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -235,13 +245,15 @@ export default {
 }
 
 .toolbar button.active {
-  background: rgba(0, 110, 130, 0.72);
+  color: var(--scene-panel-bg, #fff);
+  background: var(--scene-button-active-bg, linear-gradient(180deg, #2d8cff, #126bff));
 }
 
 .toolbar button:hover {
-  box-shadow: 0 0 14px rgba(0, 245, 255, 0.18);
-  border-color: rgba(0, 245, 255, 0.7);
+  box-shadow: 0 0 14px var(--scene-primary-soft, rgba(18, 107, 255, 0.14));
+  border-color: var(--scene-primary, #126bff);
 }
+
 .toolbar button:disabled {
   opacity: 0.35;
   cursor: not-allowed;
@@ -249,15 +261,16 @@ export default {
 }
 
 .toolbar .danger {
-  border-color: rgba(255, 85, 79, 0.72);
-  background: rgba(82, 18, 22, 0.72);
+  color: var(--scene-danger, #ff4d43);
+  border-color: var(--scene-danger, #ff4d43);
+  background: var(--scene-danger-bg, rgba(255, 77, 67, 0.10));
 }
 
 .host {
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: #020811;
+  background: var(--scene-panel-bg, #f6fbff);
 }
 
 .tip {
@@ -266,9 +279,10 @@ export default {
   min-width: 230px;
   transform: translate(-50%, -112%);
   padding: 12px;
-  border: 1px solid rgba(0, 245, 255, 0.66);
-  background: rgba(1, 22, 32, 0.92);
-  box-shadow: 0 0 22px rgba(0, 245, 255, 0.22);
+  color: var(--scene-text, #17324d);
+  border: 1px solid var(--scene-primary, #126bff);
+  background: var(--scene-card-bg, rgba(255, 255, 255, 0.86));
+  box-shadow: 0 0 22px var(--scene-primary-soft, rgba(18, 107, 255, 0.14));
   pointer-events: none;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -276,22 +290,22 @@ export default {
 
 .tip h4 {
   margin: 0 0 8px;
-  color: #00f5ff;
+  color: var(--scene-primary, #126bff);
 }
 
 .tip p {
   margin: 5px 0;
-  color: #cfe9ee;
+  color: var(--scene-text, #17324d);
   font-size: 13px;
 }
 
 .tip em {
-  color: #ff6c66;
+  color: var(--scene-danger, #ff4d43);
   font-style: normal;
 }
 
 .tip small {
-  color: rgba(220, 255, 255, 0.65);
+  color: var(--scene-muted, #60708a);
 }
 
 .task {
@@ -301,19 +315,20 @@ export default {
   z-index: 8;
   width: 248px;
   padding: 12px;
-  border: 1px solid rgba(0, 245, 255, 0.36);
-  background: rgba(0, 22, 34, 0.76);
+  border: 1px solid var(--scene-card-border, rgba(45, 140, 255, 0.22));
+  background: var(--scene-card-bg, rgba(255, 255, 255, 0.86));
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
 
 .task h4 {
   margin: 0 0 8px;
+  color: var(--scene-text, #17324d);
 }
 
 .task strong {
   display: block;
-  color: #00f5ff;
+  color: var(--scene-primary, #126bff);
   font-size: 21px;
   margin-bottom: 8px;
 }
@@ -321,28 +336,29 @@ export default {
 .task p {
   display: flex;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(0, 245, 255, 0.1);
+  border-bottom: 1px solid var(--scene-card-border, rgba(45, 140, 255, 0.22));
   padding: 5px 0;
   margin: 0;
+  color: var(--scene-muted, #60708a);
   font-size: 13px;
 }
 
 .task b {
-  color: #26f2a3;
+  color: var(--scene-success, #18a869);
 }
 
 .bar {
   margin-top: 12px;
   height: 7px;
   border-radius: 8px;
-  background: rgba(150, 180, 190, 0.14);
+  background: var(--scene-primary-soft, rgba(18, 107, 255, 0.14));
   overflow: hidden;
 }
 
 .bar i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #00c8c6, #70ffff);
+  background: var(--scene-progress, linear-gradient(90deg, #126bff, #67b7ff));
 }
 
 .hint {
@@ -350,7 +366,7 @@ export default {
   left: 18px;
   bottom: 14px;
   z-index: 8;
-  color: rgba(220, 255, 255, 0.48);
+  color: var(--scene-weak, rgba(68, 93, 124, 0.58));
   font-size: 12px;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);

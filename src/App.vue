@@ -1,5 +1,5 @@
 <template>
-  <div class="app-page">
+  <div class="app-page" :style="themeVars">
     <div class="app-head">
       <div>
         <h1>智慧物业数字孪生平台</h1>
@@ -26,6 +26,7 @@
         height="720px"
         :auto-play="false"
         :disabled="demoRunning"
+        :theme-name="themeName"
         @scene-event="handleSceneEvent"
       />
       <robot-center-scene
@@ -36,6 +37,7 @@
         :dwell-scale="1"
         :auto-play="false"
         :disabled="demoRunning"
+        :theme-name="themeName"
         @scene-event="handleSceneEvent"
       />
 
@@ -53,6 +55,7 @@
 <script>
 import IotCenterScene from './components/IotCenterScene.vue'
 import RobotCenterScene from './components/RobotCenterScene.vue'
+import { applyThemeVars, getSceneTheme } from './theme/sceneThemes'
 
 /** 场景 key → 组件 ref 映射 */
 const SCENES = {
@@ -66,12 +69,21 @@ export default {
   data () {
     return {
       active: 'iot',
+      themeName: 'blueWhite',
       latestEvent: '',
       demoRunning: false,
       demoProgress: 0,
       demoChapter: '',
       chapterTitle: '',
       chapterTimer: null
+    }
+  },
+  computed: {
+    theme () {
+      return getSceneTheme(this.themeName)
+    },
+    themeVars () {
+      return applyThemeVars(this.theme)
     }
   },
   watch: {
@@ -164,24 +176,171 @@ export default {
 </script>
 
 <style>
-html,body{margin:0;width:100%;min-height:100%;background:#020811;font-family:"Microsoft YaHei","PingFang SC",Arial,sans-serif;color:#d8fbff}*{box-sizing:border-box}.app-page{min-height:100vh;padding:22px;background:radial-gradient(circle at 50% 0%,rgba(0,245,255,.14),transparent 34%),linear-gradient(180deg,#020811,#01050a)}.app-head{max-width:1500px;margin:0 auto 16px;display:flex;align-items:center;justify-content:space-between}.app-head h1{margin:0;font-size:25px;letter-spacing:2px}.app-head p{margin:8px 0 0;color:rgba(210,250,255,.65)}.switches{display:flex;gap:10px}.switches button{height:38px;padding:0 18px;color:#dff;border:1px solid rgba(0,245,255,.45);background:rgba(0,45,58,.55);cursor:pointer}.switches button.active{color:#fff;background:linear-gradient(180deg,rgba(0,245,255,.42),rgba(0,110,130,.55));box-shadow:0 0 16px rgba(0,245,255,.35) inset}.app-shell{max-width:1500px;margin:0 auto;position:relative}.event-log{max-width:1500px;margin:12px auto 0;padding:12px 14px;border:1px solid rgba(0,245,255,.24);background:rgba(0,22,32,.6);color:rgba(220,255,255,.78)}
+html,
+body {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+  background: var(--scene-page-bg, #f4f9ff);
+  font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+  color: var(--scene-text, #17324d);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.app-page {
+  min-height: 100vh;
+  padding: 22px;
+  color: var(--scene-text, #17324d);
+  background: var(--scene-page-gradient, linear-gradient(180deg, #f7fbff 0%, #edf6ff 100%));
+}
+
+.app-head {
+  max-width: 1500px;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.app-head h1 {
+  margin: 0;
+  font-size: 25px;
+  letter-spacing: 2px;
+  color: var(--scene-text, #17324d);
+}
+
+.app-head p {
+  margin: 8px 0 0;
+  color: var(--scene-muted, #60708a);
+}
+
+.switches {
+  display: flex;
+  gap: 10px;
+}
+
+.switches button {
+  height: 38px;
+  padding: 0 18px;
+  color: var(--scene-button-text, #17456f);
+  border: 1px solid var(--scene-panel-border, rgba(45, 140, 255, 0.28));
+  background: var(--scene-button-bg, rgba(255, 255, 255, 0.78));
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.25s;
+}
+
+.switches button.active {
+  color: var(--scene-panel-bg, #fff);
+  background: var(--scene-button-active-bg, linear-gradient(180deg, #2d8cff, #126bff));
+  box-shadow: inset 0 0 16px var(--scene-primary-soft, rgba(18, 107, 255, 0.14));
+}
+
+.switches button:hover:not(:disabled) {
+  border-color: var(--scene-primary, #126bff);
+  box-shadow: 0 0 16px var(--scene-primary-soft, rgba(18, 107, 255, 0.14));
+}
+
+.switches button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.app-shell {
+  max-width: 1500px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.event-log {
+  max-width: 1500px;
+  margin: 12px auto 0;
+  padding: 12px 14px;
+  border: 1px solid var(--scene-card-border, rgba(45, 140, 255, 0.22));
+  background: var(--scene-card-bg, rgba(255, 255, 255, 0.86));
+  color: var(--scene-muted, #60708a);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
 
 /* Demo 按钮 */
-.demo-btn{background:linear-gradient(135deg,rgba(0,245,255,.35),rgba(0,130,150,.45)) !important;border-color:rgba(0,245,255,.7) !important;font-size:15px;letter-spacing:1px;animation:demo-glow 2s ease-in-out infinite}
-@keyframes demo-glow{0%,100%{box-shadow:0 0 12px rgba(0,245,255,.2)}50%{box-shadow:0 0 24px rgba(0,245,255,.45)}}
-.demo-progress-bar{position:relative;width:220px;height:38px;border:1px solid rgba(0,245,255,.5);background:rgba(0,22,32,.75);overflow:hidden;border-radius:2px}
-.demo-progress-fill{height:100%;background:linear-gradient(90deg,rgba(0,245,255,.5),rgba(0,200,220,.35));transition:width .3s linear}
-.demo-progress-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:#dff;text-shadow:0 0 6px rgba(0,245,255,.3)}
+.demo-btn {
+  background: var(--scene-button-active-bg, linear-gradient(180deg, #2d8cff, #126bff)) !important;
+  border-color: var(--scene-primary, #126bff) !important;
+  font-size: 15px;
+  letter-spacing: 1px;
+  animation: demo-glow 2s ease-in-out infinite;
+}
+
+@keyframes demo-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 12px var(--scene-primary-soft, rgba(18, 107, 255, 0.14));
+  }
+
+  50% {
+    box-shadow: 0 0 24px var(--scene-primary-soft, rgba(18, 107, 255, 0.14));
+  }
+}
+
+.demo-progress-bar {
+  position: relative;
+  width: 220px;
+  height: 38px;
+  border: 1px solid var(--scene-panel-border, rgba(45, 140, 255, 0.28));
+  background: var(--scene-card-bg, rgba(255, 255, 255, 0.86));
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.demo-progress-fill {
+  height: 100%;
+  background: var(--scene-progress, linear-gradient(90deg, #126bff, #67b7ff));
+  transition: width 0.3s linear;
+}
+
+.demo-progress-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--scene-button-text, #17456f);
+  text-shadow: 0 0 6px var(--scene-primary-soft, rgba(18, 107, 255, 0.14));
+}
 
 /* 章节标题叠加层 */
-.chapter-overlay{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;font-size:64px;color:rgba(0,245,255,.75);text-shadow:0 0 40px rgba(0,245,255,.4);pointer-events:none;letter-spacing:8px;font-weight:bold}
-.chapter-enter-active{transition:all .5s ease-out}
-.chapter-leave-active{transition:all .5s ease-in}
-.chapter-enter,.chapter-leave-to{opacity:0;transform:scale(1.1)}
+.chapter-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 64px;
+  color: var(--scene-primary, #126bff);
+  text-shadow: 0 0 40px var(--scene-primary-soft, rgba(18, 107, 255, 0.14));
+  pointer-events: none;
+  letter-spacing: 8px;
+  font-weight: bold;
+}
 
-/* 毛玻璃增强 */
-.switches button{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:all .25s}
-.switches button:hover:not(:disabled){box-shadow:0 0 16px rgba(0,245,255,.2);border-color:rgba(0,245,255,.7)}
-.switches button:disabled{opacity:.5;cursor:not-allowed}
-.event-log{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.chapter-enter-active {
+  transition: all 0.5s ease-out;
+}
+
+.chapter-leave-active {
+  transition: all 0.5s ease-in;
+}
+
+.chapter-enter,
+.chapter-leave-to {
+  opacity: 0;
+  transform: scale(1.1);
+}
 </style>
