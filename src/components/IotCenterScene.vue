@@ -143,6 +143,10 @@ export default {
   z-index: 8;
   display: flex;
   justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--scene-card-border, rgba(45, 140, 255, 0.22));
+  border-radius: 6px;
+  background: var(--scene-card-bg, rgba(255, 255, 255, 0.86));
   pointer-events: none;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
@@ -198,7 +202,7 @@ export default {
 }
 
 .toolbar button.active {
-  color: var(--scene-panel-bg, #fff);
+  color: #fff;
   background: var(--scene-button-active-bg, linear-gradient(180deg, #2d8cff, #126bff));
 }
 
