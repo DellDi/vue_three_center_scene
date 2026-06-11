@@ -49,106 +49,90 @@
   </div>
 </template>
 
-<script>
+<script setup>
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import SceneRuntime from '../three-core/SceneRuntime'
 import config from '../scene-config/robotScene.config'
 
-export default {
-  name: 'RobotCenterScene',
-  props: {
-    height: { type: String, default: '620px' },
-    robotSpeed: { type: Number, default: 7 },
-    dwellScale: { type: Number, default: 1 },
-    autoPlay: { type: Boolean, default: true },
-    disabled: { type: Boolean, default: false },
-    themeName: { type: String, default: 'blueWhite' },
-  },
-  data () {
-    return {
-      paused: false,
-      tourActive: false,
-      taskStatus: '执行中',
-      currentNodeName: '大堂前厅',
-      battery: 76,
-      progress: 0,
-      dwellLeft: 0,
-      currentSpeed: 0,
-      tip: { show: false },
-    }
-  },
-  computed: {
-    progressText () {
-      return Math.max(0, Math.min(100, Math.round(this.progress))) + '%'
-    },
-    dwellText () {
-      return this.dwellLeft > 0 ? this.dwellLeft.toFixed(1) + 's' : '行进中'
-    },
-    speedText () {
-      return this.currentSpeed <= 0.05
-        ? '0.0 m/s'
-        : (this.currentSpeed * 0.085).toFixed(1) + ' m/s'
-    },
-  },
-  mounted () {
-    this.runtime = new SceneRuntime({
-      container: this.$refs.host,
-      config,
-      mode: 'robot',
-      themeName: this.themeName,
-      options: { robotSpeed: this.robotSpeed, dwellScale: this.dwellScale },
-      onEvent: this.handleRuntimeEvent,
-    })
-    this.runtime.start(config.startSceneId)
-    if (this.autoPlay) setTimeout(() => this.toggleTour(), 1500)
-  },
-  beforeDestroy () {
-    if (this.runtime) this.runtime.dispose()
-  },
-  methods: {
-    cmd (command) {
-      if (this.runtime) this.runtime.execute(command)
-    },
-    toggleTour () {
-      this.tourActive = !this.tourActive
-      this.cmd({ type: this.tourActive ? 'START_TOUR' : 'STOP_TOUR' })
-    },
-    togglePause () {
-      this.paused = !this.paused
-      if (this.runtime && this.runtime.motion)
-        this.runtime.motion.paused = this.paused
-      this.taskStatus = this.paused ? '已暂停' : '执行中'
-    },
-    handleRuntimeEvent (event) {
-      this.$emit('scene-event', event)
-      if (event.type === 'select' && event.payload)
-        this.tip = Object.assign(
-          { show: true, x: event.pointer.x, y: event.pointer.y },
-          event.payload,
-        )
-      if (event.type === 'empty-click') this.tip.show = false
-      if (event.type === 'robot-state') {
-        this.currentNodeName = event.title || this.currentNodeName
-        this.dwellLeft = event.dwellLeft || 0
-        this.currentSpeed = event.currentSpeed || 0
-        if (event.progress !== undefined) this.progress = event.progress
-        if (event.battery !== undefined) this.battery = event.battery
-      }
-    },
-    animateNumber (key, targetValue, duration = 1000) {
-      const start = performance.now()
-      const from = this[key] || 0
-      const to = targetValue
-      const tick = () => {
-        const elapsed = performance.now() - start
-        const progress = Math.min(1, elapsed / duration)
-        const eased = 1 - Math.pow(1 - progress, 3)
-        this[key] = Math.round(from + (to - from) * eased)
-        if (progress < 1) requestAnimationFrame(tick)
-      }
-      tick()
-    },
-  },
+const props = defineProps({
+  height: { type: String, default: '620px' },
+  robotSpeed: { type: Number, default: 7 },
+  dwellScale: { type: Number, default: 1 },
+  autoPlay: { type: Boolean, default: true },
+  disabled: { type: Boolean, default: false },
+  themeName: { type: String, default: 'blueWhite' },
+})
+
+const emit = defineEmits(['scene-event'])
+
+const host = ref(null)
+let runtime = null
+
+const paused = ref(false)
+const tourActive = ref(false)
+const taskStatus = ref('执行中')
+const currentNodeName = ref('大堂前厅')
+const battery = ref(76)
+const progress = ref(0)
+const dwellLeft = ref(0)
+const currentSpeed = ref(0)
+const tip = ref({ show: false })
+
+const progressText = computed(() => Math.max(0, Math.min(100, Math.round(progress.value))) + '%')
+const dwellText = computed(() => dwellLeft.value > 0 ? dwellLeft.value.toFixed(1) + 's' : '行进中')
+const speedText = computed(() => currentSpeed.value <= 0.05 ? '0.0 m/s' : (currentSpeed.value * 0.085).toFixed(1) + ' m/s')
+
+function cmd (command) {
+  if (runtime) runtime.execute(command)
 }
+
+function toggleTour () {
+  tourActive.value = !tourActive.value
+  cmd({ type: tourActive.value ? 'START_TOUR' : 'STOP_TOUR' })
+}
+
+function togglePause () {
+  paused.value = !paused.value
+  if (runtime && runtime.motion) runtime.motion.paused = paused.value
+  taskStatus.value = paused.value ? '已暂停' : '执行中'
+}
+
+function handleRuntimeEvent (event) {
+  emit('scene-event', event)
+  if (event.type === 'select' && event.payload) {
+    tip.value = Object.assign(
+      { show: true, x: event.pointer.x, y: event.pointer.y },
+      event.payload,
+    )
+  }
+  if (event.type === 'empty-click') tip.value.show = false
+  if (event.type === 'robot-state') {
+    currentNodeName.value = event.title || currentNodeName.value
+    dwellLeft.value = event.dwellLeft || 0
+    currentSpeed.value = event.currentSpeed || 0
+    if (event.progress !== undefined) progress.value = event.progress
+    if (event.battery !== undefined) battery.value = event.battery
+  }
+}
+
+onMounted(() => {
+  runtime = new SceneRuntime({
+    container: host.value,
+    config,
+    mode: 'robot',
+    themeName: props.themeName,
+    options: { robotSpeed: props.robotSpeed, dwellScale: props.dwellScale },
+    onEvent: handleRuntimeEvent,
+  })
+  runtime.start(config.startSceneId)
+  if (props.autoPlay) setTimeout(() => toggleTour(), 1500)
+})
+
+onBeforeUnmount(() => {
+  if (runtime) runtime.dispose()
+})
+
+defineExpose({ runtime })
 </script>
 
 <style scoped>

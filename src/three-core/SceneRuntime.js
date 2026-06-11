@@ -300,6 +300,10 @@ export default class SceneRuntime {
     this.renderer.domElement.addEventListener('pointerdown', this._onPointerDown)
     this.renderer.domElement.addEventListener('wheel', this._onWheel)
     window.addEventListener('resize', this._onResize)
+
+    this._resizeObserver = new ResizeObserver(() => this._onResize())
+    this._resizeObserver.observe(container)
+
     this._onResize()
   }
 
@@ -338,6 +342,10 @@ export default class SceneRuntime {
 
     // 1. 移除 DOM 事件监听
     window.removeEventListener('resize', this._onResize)
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect()
+      this._resizeObserver = null
+    }
     if (this.renderer?.domElement) {
       this.renderer.domElement.removeEventListener('pointerdown', this._onPick)
       this.renderer.domElement.removeEventListener('pointerdown', this._onPointerDown)

@@ -17,91 +17,90 @@
   </div>
 </template>
 
-<script>
+<script setup>
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import SceneRuntime from '../three-core/SceneRuntime'
 import config from '../scene-config/iotScene.config'
 
-export default {
-  name: 'IotCenterScene',
-  props: {
-    height: { type: String, default: '620px' },
-    autoPlay: { type: Boolean, default: false },
-    disabled: { type: Boolean, default: false },
-    themeName: { type: String, default: 'blueWhite' }
-  },
-  data () {
-    return {
-      title: '设备场景总览',
-      subtitle: '园区视角：点击楼栋下钻到楼层内部',
-      floorMode: false,
-      tourActive: false,
-      tip: { show: false },
-      sideList: [
+const props = defineProps({
+  height: { type: String, default: '620px' },
+  autoPlay: { type: Boolean, default: false },
+  disabled: { type: Boolean, default: false },
+  themeName: { type: String, default: 'blueWhite' }
+})
+
+const emit = defineEmits(['scene-event'])
+
+const host = ref(null)
+let runtime = null
+
+const title = ref('设备场景总览')
+const subtitle = ref('园区视角：点击楼栋下钻到楼层内部')
+const floorMode = ref(false)
+const tourActive = ref(false)
+const tip = ref({ show: false })
+const sideList = ref([
+  { name: '1号设备房', status: '正常' },
+  { name: '水泵房', status: '液位偏高' },
+  { name: '配电房', status: '温度偏高' },
+  { name: '消防通道', status: '在线' }
+])
+
+function cmd (command) {
+  if (runtime) runtime.execute(command)
+}
+
+function toggleTour () {
+  tourActive.value = !tourActive.value
+  cmd({ type: tourActive.value ? 'START_TOUR' : 'STOP_TOUR' })
+}
+
+function handleRuntimeEvent (event) {
+  emit('scene-event', event)
+  if (event.type === 'select' && event.payload) {
+    tip.value = Object.assign({ show: true, x: event.pointer.x, y: event.pointer.y }, event.payload)
+  }
+  if (event.type === 'empty-click') tip.value.show = false
+  if (event.type === 'scene-change') {
+    const scene = config.scenes[event.sceneId]
+    title.value = scene.title
+    subtitle.value = scene.subtitle
+    floorMode.value = scene.type === 'floor'
+    if (scene.type === 'floor') {
+      sideList.value = [
+        { name: '公共走廊摄像头', status: '在线' },
+        { name: '水泵房液位', status: '液位偏高' },
+        { name: '配电房温度', status: '温度偏高' },
+        { name: '消防烟感', status: '正常' }
+      ]
+    } else {
+      sideList.value = [
         { name: '1号设备房', status: '正常' },
         { name: '水泵房', status: '液位偏高' },
         { name: '配电房', status: '温度偏高' },
         { name: '消防通道', status: '在线' }
       ]
     }
-  },
-  mounted () {
-    this.runtime = new SceneRuntime({
-      container: this.$refs.host,
-      config,
-      mode: 'iot',
-      themeName: this.themeName,
-      onEvent: this.handleRuntimeEvent
-    })
-    this.runtime.start(config.startSceneId)
-    if (this.autoPlay) setTimeout(() => this.toggleTour(), 1500)
-  },
-  beforeDestroy () { if (this.runtime) this.runtime.dispose() },
-  methods: {
-    cmd (command) { if (this.runtime) this.runtime.execute(command) },
-    toggleTour () { this.tourActive = !this.tourActive; this.cmd({ type: this.tourActive ? 'START_TOUR' : 'STOP_TOUR' }) },
-    handleRuntimeEvent (event) {
-      this.$emit('scene-event', event)
-      if (event.type === 'select' && event.payload) {
-        this.tip = Object.assign({ show: true, x: event.pointer.x, y: event.pointer.y }, event.payload)
-      }
-      if (event.type === 'empty-click') this.tip.show = false
-      if (event.type === 'scene-change') {
-        const scene = config.scenes[event.sceneId]
-        this.title = scene.title
-        this.subtitle = scene.subtitle
-        this.floorMode = scene.type === 'floor'
-        if (scene.type === 'floor') {
-          this.sideList = [
-            { name: '公共走廊摄像头', status: '在线' },
-            { name: '水泵房液位', status: '液位偏高' },
-            { name: '配电房温度', status: '温度偏高' },
-            { name: '消防烟感', status: '正常' }
-          ]
-        } else {
-          this.sideList = [
-            { name: '1号设备房', status: '正常' },
-            { name: '水泵房', status: '液位偏高' },
-            { name: '配电房', status: '温度偏高' },
-            { name: '消防通道', status: '在线' }
-          ]
-        }
-      }
-    },
-    animateNumber (key, targetValue, duration = 1000) {
-      const start = performance.now()
-      const from = this[key] || 0
-      const to = targetValue
-      const tick = () => {
-        const elapsed = performance.now() - start
-        const progress = Math.min(1, elapsed / duration)
-        const eased = 1 - Math.pow(1 - progress, 3)
-        this[key] = Math.round(from + (to - from) * eased)
-        if (progress < 1) requestAnimationFrame(tick)
-      }
-      tick()
-    }
   }
 }
+
+onMounted(() => {
+  runtime = new SceneRuntime({
+    container: host.value,
+    config,
+    mode: 'iot',
+    themeName: props.themeName,
+    onEvent: handleRuntimeEvent
+  })
+  runtime.start(config.startSceneId)
+  if (props.autoPlay) setTimeout(() => toggleTour(), 1500)
+})
+
+onBeforeUnmount(() => {
+  if (runtime) runtime.dispose()
+})
+
+defineExpose({ runtime })
 </script>
 
 <style scoped>

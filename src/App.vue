@@ -52,126 +52,98 @@
   </div>
 </template>
 
-<script>
+<script setup>
+import { ref, computed, nextTick } from 'vue'
 import IotCenterScene from './components/IotCenterScene.vue'
 import RobotCenterScene from './components/RobotCenterScene.vue'
 import { applyThemeVars, getSceneTheme } from './theme/sceneThemes'
 
-/** 场景 key → 组件 ref 映射 */
 const SCENES = {
   iot: { ref: 'iotScene', label: 'IOT 园区场景' },
   robot: { ref: 'robotScene', label: '机器人清洁场景' }
 }
 
-export default {
-  name: 'App',
-  components: { IotCenterScene, RobotCenterScene },
-  data () {
-    return {
-      active: 'iot',
-      themeName: 'blueWhite',
-      latestEvent: '',
-      demoRunning: false,
-      demoProgress: 0,
-      demoChapter: '',
-      chapterTitle: '',
-      chapterTimer: null
-    }
-  },
-  computed: {
-    theme () {
-      return getSceneTheme(this.themeName)
-    },
-    themeVars () {
-      return applyThemeVars(this.theme)
-    }
-  },
-  watch: {
-    active (val) {
-      this.$nextTick(() => {
-        const cfg = SCENES[val]
-        if (!cfg) return
-        const scene = this.$refs[cfg.ref]
-        if (scene && scene.runtime) this._resizeScene(scene)
-      })
-    }
-  },
-  methods: {
-    /** 获取当前活跃场景的 runtime 引用 */
-    _activeRuntime () {
-      const cfg = SCENES[this.active]
-      return cfg ? this.$refs[cfg.ref]?.runtime : null
-    },
-    _resizeScene (scene) {
-      const host = scene.$el?.querySelector('.host')
-      if (!host || !scene.runtime) return
-      const w = host.clientWidth || 1
-      const h = host.clientHeight || 1
-      if (scene.runtime.cameraCtrl) scene.runtime.cameraCtrl.resize(w, h)
-      if (scene.runtime.labelRenderer) scene.runtime.labelRenderer.setSize(w, h)
-      if (scene.runtime.renderer) scene.runtime.renderer.setSize(w, h)
-    },
-    handleSceneEvent (event) {
-      this.latestEvent = `[${event.type}] ${event.title || event.id || ''}`
+const active = ref('iot')
+const themeName = ref('blueWhite')
+const latestEvent = ref('')
+const demoRunning = ref(false)
+const demoProgress = ref(0)
+const demoChapter = ref('')
+const chapterTitle = ref('')
+let chapterTimer = null
 
-      // Demo 事件处理
-      if (event.type === 'demo-started') {
-        this.demoRunning = true
-        this.demoProgress = 0
-        // 停止所有场景中可能正在运行的手动导览
-        Object.values(SCENES).forEach(cfg => {
-          const scene = this.$refs[cfg.ref]
-          if (scene && scene.runtime) scene.runtime.execute({ type: 'STOP_TOUR' })
-        })
-      }
-      if (event.type === 'demo-stopped') {
-        this.demoRunning = false
-        this.demoProgress = 100
-      }
-      if (event.type === 'demo-progress') {
-        this.demoProgress = (event.elapsed / event.total) * 100
-        this.demoChapter = this._getChapterName(event.stepIndex)
-      }
-      if (event.type === 'chapter-title') {
-        this.showChapterTitle(event.text)
-      }
-      if (event.type === 'switch-scene') {
-        this.active = event.scene
-        this.$nextTick(() => {
-          const runtime = this._activeRuntime()
-          if (runtime) runtime.execute({ type: 'SCENE_SWITCH_READY' })
-        })
-      }
-      if (event.type === 'act0-opening') {
-        this.showChapterTitle('全域感知·数字孪生')
-      }
-      if (event.type === 'act3-closing') {
-        this.showChapterTitle('全域管控')
-      }
-    },
-    async startDemo () {
-      this.demoRunning = true
-      // 确保演示从 IOT 场景开始
-      if (this.active !== 'iot') {
-        this.active = 'iot'
-        await this.$nextTick()
-        await new Promise(r => setTimeout(r, 500))
-      }
-      const runtime = this._activeRuntime()
-      if (runtime) runtime.execute({ type: 'START_DEMO' })
-    },
-    showChapterTitle (text) {
-      this.chapterTitle = text
-      clearTimeout(this.chapterTimer)
-      this.chapterTimer = setTimeout(() => {
-        this.chapterTitle = ''
-      }, 2500)
-    },
-    _getChapterName (stepIndex) {
-      const chapters = ['开场', '全域感知', '智慧感知', '自动执行', '全域管控']
-      return chapters[Math.min(stepIndex, chapters.length - 1)] || ''
-    }
+const iotScene = ref(null)
+const robotScene = ref(null)
+
+const sceneRefs = { iot: iotScene, robot: robotScene }
+
+const theme = computed(() => getSceneTheme(themeName.value))
+const themeVars = computed(() => applyThemeVars(theme.value))
+
+function _activeRuntime () {
+  const cfg = SCENES[active.value]
+  return cfg ? sceneRefs[active.value]?.value?.runtime : null
+}
+
+function handleSceneEvent (event) {
+  latestEvent.value = `[${event.type}] ${event.title || event.id || ''}`
+
+  if (event.type === 'demo-started') {
+    demoRunning.value = true
+    demoProgress.value = 0
+    Object.keys(sceneRefs).forEach(key => {
+      const scene = sceneRefs[key]?.value
+      if (scene && scene.runtime) scene.runtime.execute({ type: 'STOP_TOUR' })
+    })
   }
+  if (event.type === 'demo-stopped') {
+    demoRunning.value = false
+    demoProgress.value = 100
+  }
+  if (event.type === 'demo-progress') {
+    demoProgress.value = (event.elapsed / event.total) * 100
+    demoChapter.value = _getChapterName(event.stepIndex)
+  }
+  if (event.type === 'chapter-title') {
+    showChapterTitle(event.text)
+  }
+  if (event.type === 'switch-scene') {
+    active.value = event.scene
+    nextTick(() => {
+      const runtime = _activeRuntime()
+      if (runtime) runtime.execute({ type: 'SCENE_SWITCH_READY' })
+    })
+  }
+  if (event.type === 'act0-opening') {
+    showChapterTitle('全域感知·数字孪生')
+  }
+  if (event.type === 'act3-closing') {
+    showChapterTitle('全域管控')
+  }
+}
+
+async function startDemo () {
+  demoRunning.value = true
+  if (active.value !== 'iot') {
+    active.value = 'iot'
+    await nextTick()
+    await new Promise(r => setTimeout(r, 500))
+  }
+  const runtime = _activeRuntime()
+  if (runtime) runtime.execute({ type: 'START_DEMO' })
+}
+
+function showChapterTitle (text) {
+  chapterTitle.value = text
+  clearTimeout(chapterTimer)
+  chapterTimer = setTimeout(() => {
+    chapterTitle.value = ''
+  }, 2500)
+}
+
+function _getChapterName (stepIndex) {
+  const chapters = ['开场', '全域感知', '智慧感知', '自动执行', '全域管控']
+  return chapters[Math.min(stepIndex, chapters.length - 1)] || ''
 }
 </script>
 
